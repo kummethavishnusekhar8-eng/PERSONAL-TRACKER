@@ -627,8 +627,12 @@ async function checkAuth() {
   }
 
   // Device is already enrolled/logged in from previous session!
-  // If user has PIN lock configured, present PIN screen immediately (no password needed).
   try {
+    // If username is available, pull latest cloud data immediately
+    if (state.user && state.user.username) {
+      await pullFromCloudSync();
+    }
+
     const data = await api('/api/auth/me');
     state.user = data.user;
     state.profile = data.profile;

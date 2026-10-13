@@ -771,49 +771,48 @@
 
   <!-- 100% Free Direct Online Multi-Device Cloud Sync Engine (No Firebase, No Setup, Direct Network Sync) -->
   <script>
-    // Universal Multi-Device Cloud Sync Client
+    // Universal Multi-Device Cloud Sync Engine (ExtendsClass Fast JSON Storage)
     window.LunaCloudSync = {
-      // Master registry ID on restful-api.dev (free high-availability cloud object store)
-      REGISTRY_ID: 'ff808181a09d98f701a1348cc75a52c5',
-      BASE_URL: 'https://api.restful-api.dev/objects',
+      REGISTRY_BIN: 'aabebfc',
+      BASE_URL: 'https://extendsclass.com/api/json-storage/bin',
 
-      // Helper to fetch registry
-      async getRegistry() {
-        try {
-          const res = await fetch(`${this.BASE_URL}/${this.REGISTRY_ID}?t=${Date.now()}`, { cache: 'no-store' });
-          if (!res.ok) return { accounts: {} };
-          const data = await res.json();
-          return (data && data.data) ? data.data : { accounts: {} };
-        } catch (e) {
-          console.warn('[Sync] Registry fetch error:', e.message);
-          return { accounts: {} };
-        }
+      async getBin(binId) {
+        const res = await fetch(`${this.BASE_URL}/${binId}?t=${Date.now()}`, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.json();
       },
 
-      // Helper to update registry
-      async updateRegistry(data) {
-        try {
-          await fetch(`${this.BASE_URL}/${this.REGISTRY_ID}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: 'LUNACARE_MASTER_REGISTRY_V1', data })
-          });
-        } catch (e) {
-          console.warn('[Sync] Registry update error:', e.message);
-        }
+      async putBin(binId, obj) {
+        const res = await fetch(`${this.BASE_URL}/${binId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(obj)
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.json().catch(() => ({}));
+      },
+
+      async createBin(initialObj) {
+        const res = await fetch(this.BASE_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(initialObj)
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.json();
       },
 
       // Store/Sync data to the cloud for this user account
       async saveUserData(userEmail, data) {
         if (!userEmail) return false;
         const email = userEmail.toLowerCase().trim();
-        try {
-          const statusEl = document.getElementById('cloud-sync-status-text');
-          if (statusEl) statusEl.innerHTML = '<span style="color:var(--primary);">⏳ Syncing to cloud...</span>';
+        const statusEl = document.getElementById('cloud-sync-status-text');
+        if (statusEl) statusEl.innerHTML = '<span style="color:var(--primary);">⏳ Syncing to cloud...</span>';
 
-          const registry = await this.getRegistry();
-          const accounts = registry.accounts || {};
-          let objectId = accounts[email];
+        try {
+          const reg = await this.getBin(this.REGISTRY_BIN);
+          reg.accounts = reg.accounts || {};
+          let binId = reg.accounts[email];
 
           const payload = {
             email,
@@ -821,34 +820,20 @@
             data
           };
 
-          if (objectId) {
-            // Update existing cloud object
-            const updateRes = await fetch(`${this.BASE_URL}/${objectId}`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ name: 'LUNA_ACCOUNT_' + email, data: payload })
-            });
-
-            if (!updateRes.ok) {
-              // If deleted or not found, recreate
-              objectId = null;
+          if (binId) {
+            try {
+              await this.putBin(binId, payload);
+            } catch (putErr) {
+              // If bin expired or invalid, recreate
+              binId = null;
             }
           }
 
-          if (!objectId) {
-            // Create new account object
-            const createRes = await fetch(this.BASE_URL, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ name: 'LUNA_ACCOUNT_' + email, data: payload })
-            });
-            if (createRes.ok) {
-              const resJson = await createRes.json();
-              objectId = resJson.id;
-              accounts[email] = objectId;
-              registry.accounts = accounts;
-              await this.updateRegistry(registry);
-            }
+          if (!binId) {
+            const created = await this.createBin(payload);
+            binId = created.id;
+            reg.accounts[email] = binId;
+            await this.putBin(this.REGISTRY_BIN, reg);
           }
 
           // Cache cloud mirror locally as well
@@ -857,7 +842,6 @@
           return true;
         } catch (err) {
           console.warn('[Sync] saveUserData error:', err.message);
-          const statusEl = document.getElementById('cloud-sync-status-text');
           if (statusEl) statusEl.innerHTML = '● Offline / Local Mode';
           return false;
         }
@@ -868,18 +852,13 @@
         if (!userEmail) return null;
         const email = userEmail.toLowerCase().trim();
         try {
-          const registry = await this.getRegistry();
-          const accounts = registry.accounts || {};
-          const objectId = accounts[email];
-
-          if (objectId) {
-            const res = await fetch(`${this.BASE_URL}/${objectId}?t=${Date.now()}`, { cache: 'no-store' });
-            if (res.ok) {
-              const obj = await res.json();
-              if (obj && obj.data && obj.data.data) {
-                console.log('[Sync] Successfully pulled latest cloud data for', email);
-                return obj.data.data;
-              }
+          const reg = await this.getBin(this.REGISTRY_BIN);
+          const binId = reg.accounts && reg.accounts[email];
+          if (binId) {
+            const res = await this.getBin(binId);
+            if (res && res.data) {
+              console.log('[Sync] Pulled cloud data for', email);
+              return res.data;
             }
           }
         } catch (err) {
