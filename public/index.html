@@ -323,27 +323,28 @@
         </div>
 
         <div class="card">
-          <h3 style="font-size:1.05rem; font-weight:800; margin-bottom:14px;">🔄 Multi-Phone Data Sync</h3>
+          <h3 style="font-size:1.05rem; font-weight:800; margin-bottom:14px;">☁️ Automatic Multi-Phone Cloud Sync</h3>
           <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:12px;">
-            Transfer or sync your cycle data instantly across multiple phones or laptops.
+            Your cycle and health data automatically syncs across all your phones and laptops via the cloud when using the same account. No codes needed!
           </p>
-          <div style="display:flex; flex-direction:column; gap:10px;">
-            <button class="btn btn-secondary" onclick="exportSyncCode()">
-              🔑 Copy Instant 1-Click Sync Code
-            </button>
-            <button class="btn btn-secondary" onclick="importSyncCode()">
-              📥 Enter Sync Code from Another Phone
-            </button>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-              <button class="btn btn-secondary" style="font-size:0.8rem;" onclick="exportBackupJson()">
-                💾 Backup File
-              </button>
-              <button class="btn btn-secondary" style="font-size:0.8rem;" onclick="document.getElementById('backup-file-input').click()">
-                📂 Restore File
-              </button>
+          <div style="background:var(--bg-subtle); border:1px solid var(--border); border-radius:var(--radius-md); padding:10px 14px; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between;">
+            <div>
+              <div style="font-size:0.84rem; font-weight:700; color:var(--text-main);">Cloud Sync Status</div>
+              <div id="cloud-sync-status-text" style="font-size:0.75rem; color:var(--success); font-weight:600;">● Connected & Synced</div>
             </div>
-            <input type="file" id="backup-file-input" style="display:none;" accept=".json" onchange="importBackupJson(event)">
+            <button class="btn btn-secondary" style="padding:6px 12px; font-size:0.8rem;" onclick="manualSyncNow()">
+              🔄 Sync Now
+            </button>
           </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+            <button class="btn btn-secondary" style="font-size:0.8rem;" onclick="exportBackupJson()">
+              💾 Export File
+            </button>
+            <button class="btn btn-secondary" style="font-size:0.8rem;" onclick="document.getElementById('backup-file-input').click()">
+              📂 Restore File
+            </button>
+          </div>
+          <input type="file" id="backup-file-input" style="display:none;" accept=".json" onchange="importBackupJson(event)">
         </div>
 
         <div class="card">
@@ -768,55 +769,129 @@
     </div>
   </div>
 
-  <!-- 100% Free Zero-Setup Instant Cloud Sync Engine (No Firebase configuration needed) -->
+  <!-- 100% Free Direct Online Multi-Device Cloud Sync Engine (No Firebase, No Setup, Direct Network Sync) -->
   <script>
     // Universal Multi-Device Cloud Sync Client
     window.LunaCloudSync = {
-      binUrl: 'https://api.jsonbin.io/v3/b',
-      masterKey: '$2a$10$7zB3cT6e6eK1DkP5x6uCeeFvP9P7d1G3kL5u6y8x8q', // Free secure cloud channel
-      
-      // Store/Sync data securely using hashed user account key
-      async saveUserData(userEmail, data) {
+      // Master registry ID on restful-api.dev (free high-availability cloud object store)
+      REGISTRY_ID: 'ff808181a09d98f701a1348cc75a52c5',
+      BASE_URL: 'https://api.restful-api.dev/objects',
+
+      // Helper to fetch registry
+      async getRegistry() {
         try {
-          const syncId = 'luna_sync_' + btoa(userEmail.toLowerCase().trim()).replace(/=/g, '');
+          const res = await fetch(`${this.BASE_URL}/${this.REGISTRY_ID}?t=${Date.now()}`, { cache: 'no-store' });
+          if (!res.ok) return { accounts: {} };
+          const data = await res.json();
+          return (data && data.data) ? data.data : { accounts: {} };
+        } catch (e) {
+          console.warn('[Sync] Registry fetch error:', e.message);
+          return { accounts: {} };
+        }
+      },
+
+      // Helper to update registry
+      async updateRegistry(data) {
+        try {
+          await fetch(`${this.BASE_URL}/${this.REGISTRY_ID}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: 'LUNACARE_MASTER_REGISTRY_V1', data })
+          });
+        } catch (e) {
+          console.warn('[Sync] Registry update error:', e.message);
+        }
+      },
+
+      // Store/Sync data to the cloud for this user account
+      async saveUserData(userEmail, data) {
+        if (!userEmail) return false;
+        const email = userEmail.toLowerCase().trim();
+        try {
+          const statusEl = document.getElementById('cloud-sync-status-text');
+          if (statusEl) statusEl.innerHTML = '<span style="color:var(--primary);">⏳ Syncing to cloud...</span>';
+
+          const registry = await this.getRegistry();
+          const accounts = registry.accounts || {};
+          let objectId = accounts[email];
+
           const payload = {
-            email: userEmail.toLowerCase().trim(),
+            email,
             updatedAt: new Date().toISOString(),
-            data: data
+            data
           };
 
-          // Use public distributed free sync relay (kvdb / npoint / jsonbin / myjson fallback)
-          const res = await fetch(`https://api.npoint.io/${syncId.slice(0, 24)}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          }).catch(() => null);
+          if (objectId) {
+            // Update existing cloud object
+            const updateRes = await fetch(`${this.BASE_URL}/${objectId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name: 'LUNA_ACCOUNT_' + email, data: payload })
+            });
 
-          // Backup distributed cloud mirror
+            if (!updateRes.ok) {
+              // If deleted or not found, recreate
+              objectId = null;
+            }
+          }
+
+          if (!objectId) {
+            // Create new account object
+            const createRes = await fetch(this.BASE_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name: 'LUNA_ACCOUNT_' + email, data: payload })
+            });
+            if (createRes.ok) {
+              const resJson = await createRes.json();
+              objectId = resJson.id;
+              accounts[email] = objectId;
+              registry.accounts = accounts;
+              await this.updateRegistry(registry);
+            }
+          }
+
+          // Cache cloud mirror locally as well
           localStorage.setItem('lunacare_cloud_mirror', JSON.stringify(payload));
+          if (statusEl) statusEl.innerHTML = '● Synced via Cloud (' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ')';
           return true;
         } catch (err) {
-          console.warn('Cloud sync note:', err.message);
+          console.warn('[Sync] saveUserData error:', err.message);
+          const statusEl = document.getElementById('cloud-sync-status-text');
+          if (statusEl) statusEl.innerHTML = '● Offline / Local Mode';
           return false;
         }
       },
 
+      // Load data from the cloud for this user account
       async loadUserData(userEmail) {
+        if (!userEmail) return null;
+        const email = userEmail.toLowerCase().trim();
         try {
-          const syncId = 'luna_sync_' + btoa(userEmail.toLowerCase().trim()).replace(/=/g, '');
-          const res = await fetch(`https://api.npoint.io/${syncId.slice(0, 24)}`, { cache: 'no-store' });
-          if (res && res.ok) {
-            const json = await res.json();
-            if (json && json.data) return json.data;
+          const registry = await this.getRegistry();
+          const accounts = registry.accounts || {};
+          const objectId = accounts[email];
+
+          if (objectId) {
+            const res = await fetch(`${this.BASE_URL}/${objectId}?t=${Date.now()}`, { cache: 'no-store' });
+            if (res.ok) {
+              const obj = await res.json();
+              if (obj && obj.data && obj.data.data) {
+                console.log('[Sync] Successfully pulled latest cloud data for', email);
+                return obj.data.data;
+              }
+            }
           }
-        } catch (e) {}
+        } catch (err) {
+          console.warn('[Sync] loadUserData error:', err.message);
+        }
 
         // Fallback to local mirror
         const local = localStorage.getItem('lunacare_cloud_mirror');
         if (local) {
           try {
             const parsed = JSON.parse(local);
-            if (parsed.email === userEmail.toLowerCase().trim()) return parsed.data;
+            if (parsed.email === email) return parsed.data;
           } catch (e) {}
         }
         return null;

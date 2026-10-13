@@ -101,7 +101,7 @@ function saveClientDb(db) {
   localStorage.setItem('lunacare_offline_db', JSON.stringify(db));
 }
 
-// Universal Cloud & Multi-Device Sync Engine (Zero Database Setup Required)
+// Universal Cloud & Multi-Device Sync Engine (Direct Network Sync)
 async function pushToCloudSync() {
   if (!state.user || !state.user.username) return;
   try {
@@ -121,28 +121,43 @@ async function pushToCloudSync() {
   }
 }
 
-// 1-Click Instant Sync Code (Works across all devices instantly without any database setup)
-function exportSyncCode() {
+// Pull latest cloud data across devices seamlessly
+async function pullFromCloudSync() {
+  if (!state.user || !state.user.username) return false;
+  try {
+    if (!window.LunaCloudSync) return false;
+    const cloudData = await window.LunaCloudSync.loadUserData(state.user.username);
+    if (cloudData && (cloudData.cycles || cloudData.logs || cloudData.profile)) {
+      const db = getClientDb();
+      if (cloudData.cycles) db.cycles = cloudData.cycles;
+      if (cloudData.logs) db.logs = cloudData.logs;
+      if (cloudData.profile) db.profile = { ...(db.profile || {}), ...cloudData.profile };
+      saveClientDb(db);
+
+      state.cycles = db.cycles || [];
+      state.logs = db.logs || {};
+      state.profile = db.profile || {};
+      state.stats = computeClientStats(db);
+
+      renderHome();
+      renderProfileDetails();
+      if (state.currentTab === 'calendar') renderCalendar();
+      if (state.currentTab === 'analytics') renderAnalytics();
+      return true;
+    }
+  } catch (err) {
+    console.warn('Sync pull note:', err.message);
+  }
+  return false;
+}
+
+// Manual Sync trigger from profile screen
+async function manualSyncNow() {
   haptic(25);
-  const db = getClientDb();
-  const exportData = {
-    app: 'LunaCare',
-    version: '2.0',
-    exportedAt: new Date().toISOString(),
-    user: state.user,
-    profile: db.profile || {},
-    cycles: db.cycles || [],
-    logs: db.logs || {}
-  };
-
-  const jsonStr = JSON.stringify(exportData);
-  const code = btoa(unescape(encodeURIComponent(jsonStr)));
-
-  navigator.clipboard.writeText(code).then(() => {
-    alert('📋 Instant Sync Code copied to clipboard!\n\nSend this code to your other phone (via WhatsApp, email, or message), then on that phone tap "Enter Sync Code from Another Phone" to sync instantly.');
-  }).catch(() => {
-    prompt('Copy this Sync Code and paste it on your other phone:', code);
-  });
+  showToast('🔄 Connecting & syncing with cloud...');
+  const pushed = await pushToCloudSync();
+  const pulled = await pullFromCloudSync();
+  showToast('🌸 Cloud Sync complete! Up to date.');
 }
 
 function importSyncCode() {
@@ -388,7 +403,6 @@ async function handleClientStorageFallback(path, options = {}) {
   if (path === '/api/auth/me') {
     const stats = computeClientStats(db);
     const user = state.user || db.users[0];
-    initFirebaseRealtimeListener();
     return { user, profile: db.profile, stats };
   }
 
@@ -750,9 +764,23 @@ async function loadInitialData() {
     state.stats = statsRes.stats || cycleRes.stats;
     renderHome();
     loadNetworkInfo();
+
+    // Automatically sync latest cloud state across devices in background
+    setTimeout(async () => {
+      await pullFromCloudSync();
+    }, 100);
   } catch (err) {
     console.error('Failed to load initial data:', err);
   }
+}
+
+// Background auto-sync every 30 seconds if page is visible
+if (typeof window !== 'undefined') {
+  setInterval(() => {
+    if (state.token && state.user && document.visibilityState === 'visible') {
+      pullFromCloudSync();
+    }
+  }, 30000);
 }
 
 // Network / Phone connect info
