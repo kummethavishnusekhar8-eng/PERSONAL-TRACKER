@@ -31,15 +31,8 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
-  // Let API requests go to network
-  if (event.request.url.includes('/api/')) {
-    event.respondWith(
-      fetch(event.request).catch(() => {
-        return new Response(JSON.stringify({ offline: true, error: 'Network unavailable' }), {
-          headers: { 'Content-Type': 'application/json' }
-        });
-      })
-    );
+  // Let Firebase / Google APIs and local API requests go straight to network
+  if (event.request.url.includes('/api/') || event.request.url.includes('firebase') || event.request.url.includes('googleapis') || event.request.url.includes('gstatic')) {
     return;
   }
 

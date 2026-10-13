@@ -690,6 +690,45 @@
     </div>
   </div>
 
+  <!-- Google Firebase Real-time Multi-Device Cloud Sync SDK -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+    import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyABr4C4_c-N1t160_jhUEufjpt_KlfmPJg",
+      authDomain: "personal-tracker-393ed.firebaseapp.com",
+      projectId: "personal-tracker-393ed",
+      storageBucket: "personal-tracker-393ed.firebasestorage.app",
+      messagingSenderId: "644620382108",
+      appId: "1:644620382108:web:537ea8545e656d7577e259",
+      measurementId: "G-Q16JMGGCB2"
+    };
+
+    // Initialize Firebase
+    const fbApp = initializeApp(firebaseConfig);
+    const fbAuth = getAuth(fbApp);
+    const fbDb = getFirestore(fbApp);
+
+    // Expose Firebase API to LunaCare app
+    window.LunaFirebase = {
+      app: fbApp,
+      auth: fbAuth,
+      db: fbDb,
+      signIn: (email, pass) => signInWithEmailAndPassword(fbAuth, email, pass),
+      signUp: (email, pass) => createUserWithEmailAndPassword(fbAuth, email, pass),
+      signOut: () => signOut(fbAuth),
+      onAuth: (cb) => onAuthStateChanged(fbAuth, cb),
+      getUserDoc: (uid) => getDoc(doc(fbDb, "users", uid)),
+      setUserDoc: (uid, data) => setDoc(doc(fbDb, "users", uid), data, { merge: true }),
+      listenUserDoc: (uid, cb) => onSnapshot(doc(fbDb, "users", uid), cb)
+    };
+
+    // Notify app that Firebase is initialized
+    window.dispatchEvent(new CustomEvent('LunaFirebaseReady'));
+  </script>
+
   <script src="/app.js"></script>
 </body>
 </html>
