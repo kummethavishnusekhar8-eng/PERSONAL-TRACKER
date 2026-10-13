@@ -81,11 +81,8 @@ async function api(path, options = {}) {
 // Client Storage Engine for 100% Free Netlify Static Deployment
 function getClientDb() {
   const defaultDb = {
-    users: [{ id: 'u_local', username: 'lunacare', name: 'Luna User', password: 'password', pin: null }],
-    cycles: [
-      { id: 'c_1', startDate: '2026-09-12', startTime: '09:00', endDate: '2026-09-17', dayGap: 28, duration: 5, notes: 'Previous cycle' },
-      { id: 'c_2', startDate: '2026-10-10', startTime: '08:30', endDate: null, dayGap: 28, duration: null, notes: 'Current period' }
-    ],
+    users: [],
+    cycles: [],
     logs: {},
     profile: {
       quickPin: null,
@@ -370,14 +367,29 @@ async function handleClientStorageFallback(path, options = {}) {
     let user = { id: userId, username: email, name, pin: null, password };
 
     // Check Cloud for existing account data
+    let hadCloudData = false;
     if (window.LunaCloudSync) {
       const cloudData = await window.LunaCloudSync.loadUserData(email);
       if (cloudData) {
-        if (cloudData.cycles) db.cycles = cloudData.cycles;
-        if (cloudData.logs) db.logs = cloudData.logs;
-        if (cloudData.profile) db.profile = cloudData.profile;
+        hadCloudData = true;
+        db.cycles = cloudData.cycles || [];
+        db.logs = cloudData.logs || {};
+        db.profile = cloudData.profile || {};
         saveClientDb(db);
       }
+    }
+
+    // If new user and no cloud data existed, ensure 100% fresh clean state (0 demo cycles)
+    if (!hadCloudData && path === '/api/auth/register') {
+      db.cycles = [];
+      db.logs = {};
+      db.profile = {
+        name,
+        quickPin: null,
+        avgCycleLength: 28,
+        avgPeriodDuration: 5
+      };
+      saveClientDb(db);
     }
 
     const token = 'token_' + userId;
@@ -567,6 +579,8 @@ function computeClientStats(db) {
       mealsTracked++;
       if (l.meals.breakfast && l.meals.lunch && l.meals.dinner) fullMealsEaten++;
     }
+  });
+
   // PCOS / Hormonal Health Calculation
   // Flags: cycle gaps > 35 days, high variability (stdev > 6), severe acne or hirsutism, missing periods
   let pcosScore = 15; // default 15% baseline optimal
