@@ -1,0 +1,68 @@
+{
+  "profile": {
+    "cycleLength": 28,
+    "periodDuration": 5,
+    "quickPin": "2488",
+    "notificationsEnabled": true
+  },
+  "cycles": [],
+  "logs": {
+    "2026-10-13": {
+      "id": "log_1791865468972",
+      "date": "2026-10-13",
+      "time": "09:54",
+      "cycleDay": 1,
+      "flow": "light",
+      "padsUsed": 9,
+      "painLevel": 10,
+      "painAreas": [
+        "Abdominal Cramps"
+      ],
+      "remedies": [
+        "Heating Pad"
+      ],
+      "moods": [
+        "Sensitive"
+      ],
+      "moodSwingIntensity": "moderate",
+      "meals": {
+        "breakfast": true,
+        "lunch": true,
+        "dinner": true,
+        "waterGlasses": 9,
+        "appetite": "cravings"
+      },
+      "notes": "Period started",
+      "updatedAt": "2026-10-13T04:26:20.075Z"
+    },
+    "2026-10-27": {
+      "id": "log_1791865612972",
+      "date": "2026-10-27",
+      "time": "09:56",
+      "cycleDay": 15,
+      "flow": "medium",
+      "padsUsed": 2,
+      "painLevel": 2,
+      "painAreas": [
+        "Abdominal Cramps"
+      ],
+      "remedies": [
+        "Heating Pad"
+      ],
+      "moods": [
+        "Calm"
+      ],
+      "moodSwingIntensity": "mild",
+      "meals": {
+        "breakfast": true,
+        "lunch": true,
+        "dinner": true,
+        "waterGlasses": 6,
+        "appetite": "normal",
+        "cravingsNote": ""
+      },
+      "notes": "",
+      "updatedAt": "2026-10-13T04:26:52.972Z"
+    }
+  }
+}

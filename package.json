@@ -1,0 +1,20 @@
+{
+  "name": "lunacare-period-tracker",
+  "version": "1.0.0",
+  "description": "LunaCare - Free, Private Women's Menstrual Period & Health Tracker for Mobile & PC",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "period-tracker",
+    "menstrual-cycle",
+    "women-health",
+    "privacy-first",
+    "mobile-pwa",
+    "free"
+  ],
+  "author": "",
+  "license": "MIT"
+}

@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>LunaCare - Women's Period & Cycle Tracker</title>
+  
+  <!-- PWA & Mobile Meta -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#E11D48">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="LunaCare">
+  <link rel="icon" type="image/svg+xml" href="/icon.svg">
+  <link rel="apple-touch-icon" href="/icon.svg">
+
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+  <!-- Toast Message -->
+  <div id="toast" class="toast-msg"></div>
+
+  <!-- PIN Privacy Screen (For Sensitive Health Data on Phone) -->
+  <div id="pin-overlay" class="pin-screen-overlay">
+    <div style="text-align:center;">
+      <img src="/icon.svg" style="width:64px; height:64px; margin-bottom:12px;" alt="LunaCare Logo">
+      <h2 style="font-size:1.3rem; font-weight:800;">Private Health Lock</h2>
+      <p style="color:var(--text-muted); font-size:0.85rem;">Enter your 4-digit PIN to access LunaCare</p>
+    </div>
+    <div class="pin-digits">
+      <div class="pin-dot"></div>
+      <div class="pin-dot"></div>
+      <div class="pin-dot"></div>
+      <div class="pin-dot"></div>
+    </div>
+    <div class="pin-pad-grid">
+      <button class="pin-key" onclick="handlePinKey('1')">1</button>
+      <button class="pin-key" onclick="handlePinKey('2')">2</button>
+      <button class="pin-key" onclick="handlePinKey('3')">3</button>
+      <button class="pin-key" onclick="handlePinKey('4')">4</button>
+      <button class="pin-key" onclick="handlePinKey('5')">5</button>
+      <button class="pin-key" onclick="handlePinKey('6')">6</button>
+      <button class="pin-key" onclick="handlePinKey('7')">7</button>
+      <button class="pin-key" onclick="handlePinKey('8')">8</button>
+      <button class="pin-key" onclick="handlePinKey('9')">9</button>
+      <button class="pin-key" style="font-size:0.95rem; font-weight:700; color:var(--text-muted);" onclick="logout()">Logout</button>
+      <button class="pin-key" onclick="handlePinKey('0')">0</button>
+      <button class="pin-key" style="font-size:1.2rem;" onclick="handlePinKey('DEL')">⌫</button>
+    </div>
+    <div style="text-align:center; margin-top:20px;">
+      <a href="#" onclick="logout(); return false;" style="font-size:0.8rem; color:var(--text-muted); text-decoration:none;">
+        Sign in with Gmail/Password on this device
+      </a>
+    </div>
+  </div>
+
+  <div id="app-container">
+
+    <!-- Top App Header -->
+    <header class="app-header">
+      <div class="brand-wrapper">
+        <img src="/icon.svg" class="brand-logo" alt="LunaCare Logo">
+        <div>
+          <div class="brand-title">LunaCare</div>
+          <div class="brand-subtitle">Period & Cycle OS</div>
+        </div>
+      </div>
+      <div class="header-actions">
+        <!-- Wi-Fi / Phone QR Link Pill -->
+        <button id="header-wifi-pill" class="wifi-pill" style="display:none;" onclick="openPhoneConnectModal()" title="Connect Mobile Phone">
+          <span class="pulse"></span> Phone
+        </button>
+        <!-- Privacy Lock Button -->
+        <button class="btn-icon" onclick="toggleQuickPin()" title="Privacy PIN Protection">
+          🔒
+        </button>
+        <!-- Dark/Light Mode -->
+        <button class="btn-icon" onclick="toggleTheme()" title="Toggle Theme">
+          🌓
+        </button>
+      </div>
+    </header>
+
+    <!-- Authentication Section (Login / Sign Up) -->
+    <div id="auth-section" class="auth-container">
+      <div class="auth-card">
+        <div style="text-align:center; margin-bottom:20px;">
+          <img src="/icon.svg" style="width:56px; height:56px; margin-bottom:8px;" alt="Logo">
+          <h2 id="auth-card-title" style="font-size:1.4rem; font-weight:900;">Welcome to LunaCare</h2>
+          <p style="font-size:0.82rem; color:var(--text-muted); margin-top:4px;">Safe, Private & Free Menstrual Health Tracker</p>
+        </div>
+
+        <form id="auth-form">
+          <div id="auth-name-group" class="form-group" style="display:none;">
+            <label class="form-label">Your Name</label>
+            <input type="text" id="auth-name" class="input-text" placeholder="e.g. Maya">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Username / Email</label>
+            <input type="text" id="auth-username" class="input-text" placeholder="Enter username or email" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <input type="password" id="auth-password" class="input-text" placeholder="Enter secure password" required>
+          </div>
+          <button type="submit" id="auth-submit-btn" class="btn btn-primary" style="margin-top:10px;">
+            Sign In
+          </button>
+        </form>
+
+        <div style="text-align:center; margin-top:16px;">
+          <a href="#" id="toggle-auth-mode" style="font-size:0.82rem; color:var(--primary); font-weight:700; text-decoration:none;">
+            Don't have an account? Create Free Account
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Content Container -->
+    <main id="main-app-content" class="main-content" style="display:none;">
+
+      <!-- ================= 1. HOME VIEW ================= -->
+      <section id="view-home" class="view-section active">
+        <!-- Main Circular Cycle Ring Card -->
+        <div class="card card-hero">
+          <div class="cycle-ring-container">
+            <div class="cycle-svg-wrap">
+              <svg class="cycle-ring-svg" viewBox="0 0 200 200">
+                <circle class="ring-bg" cx="100" cy="100" r="92"></circle>
+                <circle id="cycle-ring-progress" class="ring-progress" cx="100" cy="100" r="92" stroke-dasharray="578" stroke-dashoffset="0"></circle>
+              </svg>
+              <div class="cycle-ring-content">
+                <span id="cycle-phase-tag" class="cycle-phase-tag">Menstrual Phase</span>
+                <span id="cycle-day-val" class="cycle-day-number">1</span>
+                <span id="cycle-day-label" class="cycle-day-label">Day of Period</span>
+              </div>
+            </div>
+
+            <!-- Meta statistics (Gap and Countdown) -->
+            <div class="cycle-meta-row">
+              <div class="meta-box">
+                <div class="meta-title">Cycle Day Gap</div>
+                <div id="meta-day-gap" class="meta-value">28 Days</div>
+                <div class="meta-sub">Previous cycle interval</div>
+              </div>
+              <div class="meta-box">
+                <div class="meta-title">Next Period</div>
+                <div id="meta-next-period" class="meta-value">In 14 Days</div>
+                <div id="meta-next-date" class="meta-sub" style="font-weight:700; color:var(--primary);">--</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Primary CTA Button -->
+          <button class="btn btn-primary" onclick="openLogModal()">
+            🌸 + Log Today's Flow & Symptoms
+          </button>
+        </div>
+
+        <!-- Quick Action Buttons -->
+        <div class="action-grid" style="grid-template-columns: repeat(3, 1fr);">
+          <div class="quick-action-btn" onclick="openStartCycleModal()">
+            <span class="quick-action-icon">🩸</span>
+            <span class="quick-action-label">Period Started</span>
+          </div>
+          <div class="quick-action-btn" onclick="openTalkingPointsModal()">
+            <span class="quick-action-icon">🩺</span>
+            <span class="quick-action-label">Gyno Guide</span>
+          </div>
+          <div class="quick-action-btn" onclick="openDoctorReport()">
+            <span class="quick-action-icon">📋</span>
+            <span class="quick-action-label">Doctor Report</span>
+          </div>
+        </div>
+
+        <!-- Irregular Cycle / PMS Health Alert Banner -->
+        <div id="home-irregular-alert" style="display:none;"></div>
+
+        <!-- Dynamic Cycle Phase Diet & Wellness Tips -->
+        <div id="home-phase-wellness" class="phase-wellness-card"></div>
+
+        <!-- Today's Log Highlights Card -->
+        <div class="card">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+            <h3 style="font-size:1.05rem; font-weight:800;">Today's Health Summary</h3>
+            <button class="btn btn-secondary" style="width:auto; padding:4px 10px; font-size:0.75rem;" onclick="openLogModal()">Edit</button>
+          </div>
+          <div class="highlights-grid">
+            <div class="highlight-card">
+              <div class="highlight-header">
+                <span class="highlight-label">Period Flow</span>
+                <span style="font-size:1.1rem;">💧</span>
+              </div>
+              <span id="today-flow-badge" class="highlight-badge badge-flow-none">NOT LOGGED</span>
+            </div>
+
+            <div class="highlight-card">
+              <div class="highlight-header">
+                <span class="highlight-label">Pads Used</span>
+                <span style="font-size:1.1rem;">🧻</span>
+              </div>
+              <span id="today-pads-count" class="highlight-val">0 Pads</span>
+            </div>
+
+            <div class="highlight-card">
+              <div class="highlight-header">
+                <span class="highlight-label">Pain Level</span>
+                <span style="font-size:1.1rem;">⚡</span>
+              </div>
+              <span id="today-pain-val" class="highlight-val">0 / 10</span>
+            </div>
+
+            <div class="highlight-card">
+              <div class="highlight-header">
+                <span class="highlight-label">Water Intake</span>
+                <span style="font-size:1.1rem;">💧</span>
+              </div>
+              <span id="today-water-val" class="highlight-val">1.5 L</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= 2. CALENDAR VIEW ================= -->
+      <section id="view-calendar" class="view-section">
+        <div class="calendar-card">
+          <div class="calendar-header">
+            <h2 id="cal-month-title" class="cal-month-title">October 2026</h2>
+            <div style="display:flex; gap:8px;">
+              <button class="cal-nav-btn" onclick="prevMonth()">‹</button>
+              <button class="cal-nav-btn" onclick="nextMonth()">›</button>
+            </div>
+          </div>
+
+          <div class="calendar-weekdays">
+            <span>SUN</span><span>MON</span><span>TUE</span><span>WED</span><span>THU</span><span>FRI</span><span>SAT</span>
+          </div>
+
+          <div id="cal-days-grid" class="calendar-days-grid"></div>
+
+          <div class="calendar-legend">
+            <div class="legend-item"><span class="legend-badge" style="background:var(--primary);"></span> Period Day</div>
+            <div class="legend-item"><span class="legend-badge" style="background:var(--primary-light); border:1px dashed var(--primary);"></span> Predicted</div>
+            <div class="legend-item"><span class="legend-badge" style="background:var(--secondary-light);"></span> Fertile Window</div>
+            <div class="legend-item"><span class="legend-badge" style="border:2px solid #db2777;"></span> Ovulation</div>
+          </div>
+        </div>
+
+        <!-- Selected Date Drawer -->
+        <div id="cal-date-detail" class="card">
+          <!-- Populated dynamically by app.js -->
+        </div>
+      </section>
+
+      <!-- ================= 3. ANALYTICS VIEW ================= -->
+      <section id="view-analytics" class="view-section">
+        <div id="analytics-content" style="display:flex; flex-direction:column; gap:16px;">
+          <!-- Dynamically populated by renderAnalytics() -->
+        </div>
+      </section>
+
+      <!-- ================= 4. PROFILE / SETTINGS VIEW ================= -->
+      <section id="view-profile" class="view-section">
+        <div class="card card-hero">
+          <img src="/icon.svg" style="width:68px; height:68px; margin:0 auto 10px;" alt="Profile Avatar">
+          <h2 id="profile-user-name" style="font-size:1.3rem; font-weight:800;">My LunaCare Profile</h2>
+          <p id="profile-user-sub" style="color:var(--text-muted); font-size:0.85rem;">Private Health Data</p>
+        </div>
+
+        <div class="card">
+          <h3 style="font-size:1.05rem; font-weight:800; margin-bottom:14px;">Mobile & Security</h3>
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <button class="btn btn-secondary" onclick="openPhoneConnectModal()">
+              📱 Open on iPhone / Android Phone (QR Code)
+            </button>
+            <button class="btn btn-secondary" onclick="toggleQuickPin()">
+              🔒 Set / Change 4-Digit Quick PIN Lock
+            </button>
+            <button class="btn btn-secondary" onclick="openDoctorReport()">
+              🩺 Generate Gynecologist Health Report
+            </button>
+            <button class="btn btn-secondary" onclick="downloadCsvReport()">
+              📥 Download Health Records (CSV)
+            </button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 style="font-size:1.05rem; font-weight:800; margin-bottom:14px;">Data & Storage</h3>
+          <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:12px;">
+            Your confidential records are encrypted and stored safely on your machine with 0 cloud leakage.
+          </p>
+          <button class="btn btn-outline-danger" onclick="logout()">
+            Sign Out
+          </button>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Bottom Navigation Bar for Mobile -->
+    <nav class="bottom-nav">
+      <button class="nav-tab active" data-tab="home">
+        <span class="nav-icon" style="font-size:1.3rem;">🌸</span>
+        <span>Today</span>
+      </button>
+      <button class="nav-tab" data-tab="calendar">
+        <span class="nav-icon" style="font-size:1.3rem;">📅</span>
+        <span>Calendar</span>
+      </button>
+      <div class="nav-tab nav-tab-log" data-tab="log">
+        <div class="nav-log-btn">+</div>
+        <span style="font-size:0.65rem; font-weight:800; color:var(--primary); margin-top:2px;">Log</span>
+      </div>
+      <button class="nav-tab" data-tab="analytics">
+        <span class="nav-icon" style="font-size:1.3rem;">📊</span>
+        <span>Trends</span>
+      </button>
+      <button class="nav-tab" data-tab="profile">
+        <span class="nav-icon" style="font-size:1.3rem;">⚙️</span>
+        <span>Profile</span>
+      </button>
+    </nav>
+
+  </div>
+
+  <!-- ================= MODAL 1: DAILY SYMPTOM & FLOW LOGGER ================= -->
+  <div id="log-modal" class="modal-overlay">
+    <div class="modal-sheet">
+      <div class="modal-drag-handle"></div>
+      <div class="modal-header">
+        <h2 class="modal-title">🌸 Log Daily Health & Flow</h2>
+        <button class="modal-close-btn" onclick="closeLogModal()">×</button>
+      </div>
+
+      <!-- Date & Time (When Occurred) -->
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px;">
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label">When Occurred</label>
+          <input type="date" id="log-input-date" class="input-text">
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label">Time Occurred</label>
+          <input type="time" id="log-input-time" class="input-text">
+        </div>
+      </div>
+
+      <!-- 1. Menstrual Flow Intensity -->
+      <div class="form-group">
+        <label class="form-label">
+          <span>Flow Intensity</span>
+          <span class="form-label-desc">Select bleeding rate</span>
+        </label>
+        <div class="flow-chips-row">
+          <div class="flow-chip" data-flow="none"><span class="drop">⚪</span>None</div>
+          <div class="flow-chip" data-flow="spotting"><span class="drop">💧</span>Spotting</div>
+          <div class="flow-chip" data-flow="light"><span class="drop">🩸</span>Light</div>
+          <div class="flow-chip active" data-flow="medium"><span class="drop">🩸🩸</span>Medium</div>
+          <div class="flow-chip" data-flow="heavy"><span class="drop">🩸🩸🩸</span>Heavy</div>
+        </div>
+      </div>
+
+      <!-- 2. No. of Pads / Tampons Used -->
+      <div class="form-group">
+        <label class="form-label">
+          <span>No. of Pads / Tampons Used</span>
+          <span class="form-label-desc">Total count for this day</span>
+        </label>
+        <div class="stepper-wrap">
+          <button type="button" class="stepper-btn" onclick="adjustPads(-1)">−</button>
+          <span id="pads-counter-val" class="stepper-val">2</span>
+          <button type="button" class="stepper-btn" onclick="adjustPads(1)">+</button>
+        </div>
+      </div>
+
+      <!-- 3. Pain Rating & Location -->
+      <div class="form-group">
+        <label class="form-label">
+          <span>Pain & Cramps Severity</span>
+          <span id="pain-bubble-text" class="slider-val-bubble">3/10 - Mild Cramps</span>
+        </label>
+        <div class="pain-slider-wrap">
+          <input type="range" id="pain-range-slider" class="pain-range" min="0" max="10" value="3">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Pain Area(s)</label>
+        <div id="pain-areas-chips" class="chip-grid">
+          <span class="select-chip active" data-val="Abdominal Cramps" onclick="toggleChipSelection('pain-areas-chips','painAreas','Abdominal Cramps')">Abdominal Cramps</span>
+          <span class="select-chip" data-val="Lower Back" onclick="toggleChipSelection('pain-areas-chips','painAreas','Lower Back')">Lower Back</span>
+          <span class="select-chip" data-val="Headache" onclick="toggleChipSelection('pain-areas-chips','painAreas','Headache')">Headache</span>
+          <span class="select-chip" data-val="Tender Breasts" onclick="toggleChipSelection('pain-areas-chips','painAreas','Tender Breasts')">Tender Breasts</span>
+          <span class="select-chip" data-val="Pelvic Pressure" onclick="toggleChipSelection('pain-areas-chips','painAreas','Pelvic Pressure')">Pelvic Pressure</span>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Remedies Taken</label>
+        <div id="remedies-chips" class="chip-grid">
+          <span class="select-chip active" data-val="Heating Pad" onclick="toggleChipSelection('remedies-chips','remedies','Heating Pad')">Heating Pad</span>
+          <span class="select-chip" data-val="Herbal Tea" onclick="toggleChipSelection('remedies-chips','remedies','Herbal Tea')">Herbal Tea</span>
+          <span class="select-chip" data-val="Rest & Sleep" onclick="toggleChipSelection('remedies-chips','remedies','Rest & Sleep')">Rest & Sleep</span>
+          <span class="select-chip" data-val="Warm Shower" onclick="toggleChipSelection('remedies-chips','remedies','Warm Shower')">Warm Shower</span>
+          <span class="select-chip" data-val="Pain Reliever" onclick="toggleChipSelection('remedies-chips','remedies','Pain Reliever')">Pain Reliever</span>
+        </div>
+      </div>
+
+      <!-- 4. Mood Swings & Emotions -->
+      <div class="form-group">
+        <label class="form-label">Mood & Emotional Wellbeing</label>
+        <div id="moods-chips" class="chip-grid">
+          <span class="select-chip" data-val="Happy" onclick="toggleChipSelection('moods-chips','moods','Happy')">😊 Happy</span>
+          <span class="select-chip active" data-val="Calm" onclick="toggleChipSelection('moods-chips','moods','Calm')">😌 Calm</span>
+          <span class="select-chip" data-val="Sensitive" onclick="toggleChipSelection('moods-chips','moods','Sensitive')">🥺 Sensitive</span>
+          <span class="select-chip" data-val="Irritable" onclick="toggleChipSelection('moods-chips','moods','Irritable')">😠 Irritable</span>
+          <span class="select-chip" data-val="Anxious" onclick="toggleChipSelection('moods-chips','moods','Anxious')">😰 Anxious</span>
+          <span class="select-chip" data-val="Mood Swings" onclick="toggleChipSelection('moods-chips','moods','Mood Swings')">🌪️ Mood Swings</span>
+          <span class="select-chip" data-val="Exhausted" onclick="toggleChipSelection('moods-chips','moods','Exhausted')">😴 Exhausted</span>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Mood Swing Intensity</label>
+        <select id="mood-swing-intensity" class="input-select">
+          <option value="mild">Mild (Normal shifts)</option>
+          <option value="moderate">Moderate (Noticeable irritability/emotion)</option>
+          <option value="high">High (Intense mood swings)</option>
+        </select>
+      </div>
+
+      <!-- 5. Meal Eaten or Not (Nutrition & Appetite) -->
+      <div class="form-group">
+        <label class="form-label">
+          <span>Meals Eaten Today</span>
+          <span class="form-label-desc">Tap to mark eaten</span>
+        </label>
+        <div class="meal-check-group">
+          <div id="meal-btn-breakfast" class="meal-card-btn active" onclick="toggleMeal('breakfast')">
+            <span>🍳</span>
+            <span>Breakfast</span>
+          </div>
+          <div id="meal-btn-lunch" class="meal-card-btn active" onclick="toggleMeal('lunch')">
+            <span>🥗</span>
+            <span>Lunch</span>
+          </div>
+          <div id="meal-btn-dinner" class="meal-card-btn active" onclick="toggleMeal('dinner')">
+            <span>🍲</span>
+            <span>Dinner</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Before-Day / Pre-Menstrual (PMS) Symptoms -->
+      <div class="form-group">
+        <label class="form-label">
+          <span>Before-Day Symptoms (Pre-Period / PMS)</span>
+          <span class="form-label-desc">Select warning signs</span>
+        </label>
+        <div id="pms-symptoms-chips" class="chip-grid">
+          <span class="select-chip" data-val="Bloating" onclick="toggleChipSelection('pms-symptoms-chips','pmsSymptoms','Bloating')">🎈 Bloating</span>
+          <span class="select-chip" data-val="Tender Breasts" onclick="toggleChipSelection('pms-symptoms-chips','pmsSymptoms','Tender Breasts')">🥥 Tender Breasts</span>
+          <span class="select-chip" data-val="Acne / Breakout" onclick="toggleChipSelection('pms-symptoms-chips','pmsSymptoms','Acne / Breakout')">✨ Acne / Breakout</span>
+          <span class="select-chip" data-val="Food Cravings" onclick="toggleChipSelection('pms-symptoms-chips','pmsSymptoms','Food Cravings')">🍫 Food Cravings</span>
+          <span class="select-chip" data-val="Fatigue" onclick="toggleChipSelection('pms-symptoms-chips','pmsSymptoms','Fatigue')">😴 Fatigue / Low Energy</span>
+          <span class="select-chip" data-val="Mood Swings" onclick="toggleChipSelection('pms-symptoms-chips','pmsSymptoms','Mood Swings')">🌪️ Mood Swings</span>
+          <span class="select-chip" data-val="Pre-Cramps" onclick="toggleChipSelection('pms-symptoms-chips','pmsSymptoms','Pre-Cramps')">⚡ Pre-Cramps</span>
+          <span class="select-chip" data-val="Insomnia" onclick="toggleChipSelection('pms-symptoms-chips','pmsSymptoms','Insomnia')">🌙 Restless Sleep</span>
+          <span class="select-chip" data-val="Headache" onclick="toggleChipSelection('pms-symptoms-chips','pmsSymptoms','Headache')">🤕 Headache</span>
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px;">
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label">Water Intake (Litres)</label>
+          <div class="stepper-wrap">
+            <button type="button" class="stepper-btn" onclick="adjustWaterLitres(-0.25)">−</button>
+            <span id="water-litres-val" class="stepper-val" style="font-size:1.15rem;">1.5 L</span>
+            <button type="button" class="stepper-btn" onclick="adjustWaterLitres(0.25)">+</button>
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label">Appetite</label>
+          <select id="appetite-select" class="input-select">
+            <option value="normal">Normal</option>
+            <option value="low">Loss of Appetite</option>
+            <option value="cravings">Food Cravings</option>
+            <option value="nausea">Nauseous</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- 6. Pill, Medication & Custom Supplements -->
+      <div class="form-group">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+          <label class="form-label" style="margin-bottom:0;">Pills & Supplements</label>
+          <button type="button" class="btn btn-secondary" style="width:auto; padding:3px 10px; font-size:0.75rem;" onclick="addCustomMedication()">+ Add Custom</button>
+        </div>
+        <div id="medications-chips" class="chip-grid">
+          <span class="select-chip" data-val="Birth Control Pill" onclick="toggleChipSelection('medications-chips','medications','Birth Control Pill')">💊 Birth Control Pill</span>
+          <span class="select-chip" data-val="Iron Supplement" onclick="toggleChipSelection('medications-chips','medications','Iron Supplement')">🩸 Iron Supplement</span>
+          <span class="select-chip" data-val="Ibuprofen / Painkiller" onclick="toggleChipSelection('medications-chips','medications','Ibuprofen / Painkiller')">💊 Ibuprofen</span>
+          <span class="select-chip" data-val="Magnesium" onclick="toggleChipSelection('medications-chips','medications','Magnesium')">✨ Magnesium</span>
+          <span class="select-chip" data-val="Multivitamin" onclick="toggleChipSelection('medications-chips','medications','Multivitamin')">🌿 Multivitamin</span>
+        </div>
+      </div>
+
+      <!-- 7. Biomarkers: BBT & Cervical Fluid -->
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px;">
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label">Basal Body Temp</label>
+          <div class="bbt-input-wrap">
+            <input type="number" step="0.1" id="log-input-bbt" class="input-text" placeholder="e.g. 98.2">
+            <span class="bbt-unit-tag">°F</span>
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label">Cervical Fluid</label>
+          <select id="cervical-fluid-select" class="input-select">
+            <option value="none">Not Checked</option>
+            <option value="dry">Dry</option>
+            <option value="sticky">Sticky</option>
+            <option value="creamy">Creamy</option>
+            <option value="egg-white">Egg-White (Fertile)</option>
+            <option value="watery">Watery</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Personal Notes -->
+      <div class="form-group">
+        <label class="form-label">Personal Notes & Reflections</label>
+        <textarea id="log-input-notes" class="input-textarea" rows="2" placeholder="Any symptoms, medications or notes..."></textarea>
+      </div>
+
+      <button class="btn btn-primary" onclick="saveLogForm()">
+        Save Today's Log
+      </button>
+    </div>
+  </div>
+
+  <!-- ================= MODAL 2: PERIOD OCCURRED (START CYCLE) ================= -->
+  <div id="cycle-modal" class="modal-overlay">
+    <div class="modal-sheet">
+      <div class="modal-drag-handle"></div>
+      <div class="modal-header">
+        <h2 class="modal-title">🩸 Record New Period Start</h2>
+        <button class="modal-close-btn" onclick="closeStartCycleModal()">×</button>
+      </div>
+      <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:16px;">
+        Recording when bleeding starts automatically calculates your Day Gap from the previous cycle and resets your Cycle Day to 1.
+      </p>
+
+      <div class="form-group">
+        <label class="form-label">Date Period Occurred (Start Date)</label>
+        <input type="date" id="cycle-start-date" class="input-text">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Time Occurred</label>
+        <input type="time" id="cycle-start-time" class="input-text">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Period End Date (Optional - leave blank if bleeding ongoing)</label>
+        <input type="date" id="cycle-end-date" class="input-text">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Initial Notes</label>
+        <textarea id="cycle-start-notes" class="input-textarea" rows="2" placeholder="e.g. Started early morning with light spotting"></textarea>
+      </div>
+
+      <button class="btn btn-primary" onclick="submitStartCycle()">
+        Confirm Period Occurred
+      </button>
+    </div>
+  </div>
+
+  <!-- ================= MODAL 2B: EDIT EXISTING CYCLE ================= -->
+  <div id="edit-cycle-modal" class="modal-overlay">
+    <div class="modal-sheet">
+      <div class="modal-drag-handle"></div>
+      <div class="modal-header">
+        <h2 class="modal-title">✏️ Edit Cycle Dates</h2>
+        <button class="modal-close-btn" onclick="closeEditCycleModal()">×</button>
+      </div>
+      <input type="hidden" id="edit-cycle-id">
+
+      <div class="form-group">
+        <label class="form-label">Period Start Date</label>
+        <input type="date" id="edit-cycle-start-date" class="input-text">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Time Occurred</label>
+        <input type="time" id="edit-cycle-start-time" class="input-text">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Period End Date</label>
+        <input type="date" id="edit-cycle-end-date" class="input-text">
+        <small style="color:var(--text-muted); font-size:0.75rem;">Clear to mark cycle as currently in progress.</small>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notes</label>
+        <textarea id="edit-cycle-notes" class="input-textarea" rows="2"></textarea>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <button class="btn btn-primary" onclick="submitEditCycle()">Save Changes</button>
+        <button class="btn btn-secondary" onclick="closeEditCycleModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL 3: PHONE CONNECT QR ================= -->
+  <div id="phone-connect-modal" class="modal-overlay">
+    <div class="modal-sheet" style="text-align:center;">
+      <div class="modal-drag-handle"></div>
+      <div class="modal-header">
+        <h2 class="modal-title">📱 Open on Mobile Phone</h2>
+        <button class="modal-close-btn" onclick="closePhoneConnectModal()">×</button>
+      </div>
+      <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:16px;">
+        Scan this QR code with your iPhone or Android camera to open LunaCare directly on your phone!
+      </p>
+
+      <div id="phone-qr-svg-wrap" style="display:flex; justify-content:center; margin-bottom:18px;">
+        <!-- QR Code rendered here -->
+      </div>
+
+      <div id="phone-urls-list">
+        <!-- Direct IP URL -->
+      </div>
+
+      <div style="background:var(--primary-soft); border:1px solid var(--primary-light); padding:12px; border-radius:var(--radius-md); font-size:0.78rem; color:var(--primary); margin-top:14px; text-align:left;">
+        💡 <strong>Tip for Phone:</strong> On iPhone Safari, tap <strong>Share > Add to Home Screen</strong>. On Android Chrome, tap <strong>Install App</strong> to run LunaCare like a native phone application!
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL 4: DOCTOR'S REPORT ================= -->
+  <div id="doctor-report-modal" class="modal-overlay">
+    <div class="modal-sheet" style="max-height:92vh;">
+      <div class="modal-drag-handle"></div>
+      <div class="modal-header">
+        <h2 class="modal-title">📋 Gynecologist Health Summary</h2>
+        <button class="modal-close-btn" onclick="closeDoctorReport()">×</button>
+      </div>
+
+      <div id="doctor-report-body" style="background:var(--bg-card); padding:12px; border-radius:var(--radius-md); margin-bottom:16px;">
+        <!-- Report table dynamic -->
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <button class="btn btn-primary" onclick="printDoctorReport()">
+          🖨️ Print / Save PDF
+        </button>
+        <button class="btn btn-secondary" onclick="downloadCsvReport()">
+          📥 Export CSV
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL 5: GYNECOLOGIST TALKING POINTS (IRREGULAR CYCLE) ================= -->
+  <div id="talking-points-modal" class="modal-overlay">
+    <div class="modal-sheet">
+      <div class="modal-drag-handle"></div>
+      <div class="modal-header">
+        <h2 class="modal-title">🩺 Gynecologist Consultation Guide</h2>
+        <button class="modal-close-btn" onclick="closeTalkingPointsModal()">×</button>
+      </div>
+
+      <div style="background:var(--bg-subtle); padding:14px; border-radius:var(--radius-md); border:1px solid var(--border); margin-bottom:16px;">
+        <h4 style="font-size:0.9rem; font-weight:800; color:var(--primary); margin-bottom:6px;">Why are you seeing this alert?</h4>
+        <p id="talking-points-reason" style="font-size:0.83rem; color:var(--text-muted);"></p>
+      </div>
+
+      <div style="margin-bottom:20px;">
+        <h4 style="font-size:0.92rem; font-weight:800; margin-bottom:10px;">Recommended Topics to Discuss:</h4>
+        <div id="talking-points-list" style="display:flex; flex-direction:column; gap:10px; font-size:0.85rem;"></div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <button class="btn btn-primary" onclick="closeTalkingPointsModal(); openDoctorReport();">
+          📋 View Full Report
+        </button>
+        <button class="btn btn-secondary" onclick="closeTalkingPointsModal()">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
