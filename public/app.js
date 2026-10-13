@@ -101,60 +101,144 @@ function saveClientDb(db) {
   localStorage.setItem('lunacare_offline_db', JSON.stringify(db));
 }
 
-// Client Storage & Firebase Cloud Real-time Engine
-let firebaseSyncActive = false;
-
-// Sync local cache with Firebase Firestore document
-async function pushToFirebaseCloud() {
-  if (!state.user || !state.user.id) return;
+// Universal Cloud & Multi-Device Sync Engine (Zero Database Setup Required)
+async function pushToCloudSync() {
+  if (!state.user || !state.user.username) return;
   try {
     const db = getClientDb();
-    const docData = {
+    const payload = {
       cycles: db.cycles || [],
       logs: db.logs || {},
       profile: db.profile || {},
       updatedAt: new Date().toISOString()
     };
 
-    if (window.LunaFirebase) {
-      await window.LunaFirebase.setUserDoc(state.user.id, docData);
+    if (window.LunaCloudSync) {
+      await window.LunaCloudSync.saveUserData(state.user.username, payload);
     }
   } catch (err) {
-    console.warn('Firebase cloud push note:', err.message);
+    console.warn('Sync push note:', err.message);
   }
 }
 
-function initFirebaseRealtimeListener() {
-  if (!window.LunaFirebase || !state.user || !state.user.id || firebaseSyncActive) return;
+// 1-Click Instant Sync Code (Works across all devices instantly without any database setup)
+function exportSyncCode() {
+  haptic(25);
+  const db = getClientDb();
+  const exportData = {
+    app: 'LunaCare',
+    version: '2.0',
+    exportedAt: new Date().toISOString(),
+    user: state.user,
+    profile: db.profile || {},
+    cycles: db.cycles || [],
+    logs: db.logs || {}
+  };
+
+  const jsonStr = JSON.stringify(exportData);
+  const code = btoa(unescape(encodeURIComponent(jsonStr)));
+
+  navigator.clipboard.writeText(code).then(() => {
+    alert('📋 Instant Sync Code copied to clipboard!\n\nSend this code to your other phone (via WhatsApp, email, or message), then on that phone tap "Enter Sync Code from Another Phone" to sync instantly.');
+  }).catch(() => {
+    prompt('Copy this Sync Code and paste it on your other phone:', code);
+  });
+}
+
+function importSyncCode() {
+  haptic(25);
+  const code = prompt('Paste the Sync Code from your other phone:');
+  if (!code || !code.trim()) return;
+
   try {
-    window.LunaFirebase.listenUserDoc(state.user.id, (snapshot) => {
-      if (snapshot.exists()) {
-        const cloudData = snapshot.data();
-        const localDb = getClientDb();
+    const jsonStr = decodeURIComponent(escape(atob(code.trim())));
+    const imported = JSON.parse(jsonStr);
 
-        let updated = false;
-        if (cloudData.cycles) { localDb.cycles = cloudData.cycles; updated = true; }
-        if (cloudData.logs) { localDb.logs = cloudData.logs; updated = true; }
-        if (cloudData.profile) { localDb.profile = { ...(localDb.profile || {}), ...cloudData.profile }; updated = true; }
+    if (imported && (imported.cycles || imported.logs)) {
+      const db = getClientDb();
+      if (imported.cycles) db.cycles = imported.cycles;
+      if (imported.logs) db.logs = imported.logs;
+      if (imported.profile) db.profile = { ...(db.profile || {}), ...imported.profile };
+      if (imported.user) db.users = [imported.user];
 
-        if (updated) {
-          saveClientDb(localDb);
-          state.cycles = localDb.cycles || [];
-          state.logs = localDb.logs || {};
-          state.profile = localDb.profile || {};
-          state.stats = computeClientStats(localDb);
+      saveClientDb(db);
+      state.cycles = db.cycles || [];
+      state.logs = db.logs || {};
+      state.profile = db.profile || {};
+      state.stats = computeClientStats(db);
 
-          renderHome();
-          renderProfileDetails();
-          if (state.currentTab === 'calendar') renderCalendar();
-          if (state.currentTab === 'analytics') renderAnalytics();
-        }
-      }
-    });
-    firebaseSyncActive = true;
+      renderHome();
+      renderProfileDetails();
+      if (state.currentTab === 'calendar') renderCalendar();
+      if (state.currentTab === 'analytics') renderAnalytics();
+
+      showToast('🌸 All data synced successfully from other phone!');
+    } else {
+      throw new Error('Invalid code format');
+    }
   } catch (err) {
-    console.warn('Firebase real-time listen setup:', err);
+    alert('❌ Invalid Sync Code. Please make sure you copied the full code from the other phone.');
   }
+}
+
+// JSON Backup & Restore
+function exportBackupJson() {
+  haptic(20);
+  const db = getClientDb();
+  const exportObj = {
+    app: 'LunaCare',
+    exportedAt: new Date().toISOString(),
+    profile: db.profile,
+    cycles: db.cycles,
+    logs: db.logs
+  };
+  const str = JSON.stringify(exportObj, null, 2);
+  const blob = new Blob([str], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `lunacare_backup_${new Date().toISOString().split('T')[0]}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('💾 Backup file saved');
+}
+
+function importBackupJson(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (data && (data.cycles || data.logs)) {
+        const db = getClientDb();
+        if (data.cycles) db.cycles = data.cycles;
+        if (data.logs) db.logs = data.logs;
+        if (data.profile) db.profile = data.profile;
+        saveClientDb(db);
+
+        state.cycles = db.cycles || [];
+        state.logs = db.logs || {};
+        state.profile = db.profile || {};
+        state.stats = computeClientStats(db);
+
+        renderHome();
+        renderProfileDetails();
+        if (state.currentTab === 'calendar') renderCalendar();
+        if (state.currentTab === 'analytics') renderAnalytics();
+
+        showToast('📂 Backup file restored successfully!');
+      } else {
+        alert('Invalid backup file');
+      }
+    } catch (err) {
+      alert('Error parsing file: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
 }
 
 // Handle Forgot Password
@@ -162,20 +246,24 @@ async function handleForgotPassword(e) {
   if (e) e.preventDefault();
   haptic(25);
   const emailInput = document.getElementById('auth-username').value.trim();
-  const email = prompt('Enter your account Email Address to receive a password reset link:', emailInput || '');
+  const email = prompt('Enter your account Email Address:', emailInput || '');
   if (!email) return;
 
   const cleanEmail = email.trim().toLowerCase();
-  try {
-    if (window.LunaFirebase && window.LunaFirebase.resetPassword) {
-      await window.LunaFirebase.resetPassword(cleanEmail);
-      alert(`✅ Password reset link sent to: ${cleanEmail}\n\nPlease check your inbox (and spam folder) to set a new password.`);
-    } else {
-      showToast(`Password reset instruction sent to ${cleanEmail}`);
-    }
-  } catch (err) {
-    alert('Password reset note: ' + (err.message || 'Check email address and try again.'));
+  const newPass = prompt(`Reset password for ${cleanEmail}.\nEnter your new password (minimum 4 characters):`);
+  if (!newPass || newPass.trim().length < 4) {
+    alert('Password must be at least 4 characters');
+    return;
   }
+
+  const db = getClientDb();
+  let user = db.users.find(u => u.username === cleanEmail);
+  if (user) {
+    user.password = newPass.trim();
+    saveClientDb(db);
+  }
+  await pushToCloudSync();
+  alert(`✅ Password successfully updated for ${cleanEmail}! You can now sign in with your new password.`);
 }
 
 // Render and Save Profile Details (Name, Weight, Height, Blood Group, Age)
@@ -235,7 +323,7 @@ async function saveProfileDetails(e) {
   db.profile = { ...(db.profile || {}), ...state.profile };
   saveClientDb(db);
 
-  await pushToFirebaseCloud();
+  await pushToCloudSync();
   renderProfileDetails();
   showToast('💾 Profile & Biometrics saved and synced!');
 }
@@ -249,68 +337,31 @@ async function handleClientStorageFallback(path, options = {}) {
     return { networkUrls: [], port: 443 };
   }
 
-  // Multi-device Cloud Auth via Firebase
+  // Account Authentication with automatic cloud data loading
   if (path === '/api/auth/register' || path === '/api/auth/login') {
     let email = (body.username || 'user@lunacare.com').trim().toLowerCase();
-    if (!email.includes('@')) email = `${email}@lunacare.app`;
     const password = body.password || 'password123';
     const name = body.name || email.split('@')[0];
+    const userId = 'u_' + btoa(email).replace(/[^a-zA-Z0-9]/g, '');
 
-    // Canonical User ID derived from email to guarantee identical ID on all phones
-    let userId = 'u_' + email.replace(/[^a-zA-Z0-9]/g, '_');
-    let user = { id: userId, username: email, name, pin: null };
+    let user = { id: userId, username: email, name, pin: null, password };
 
-    if (window.LunaFirebase) {
-      try {
-        if (path === '/api/auth/register') {
-          try {
-            const cred = await window.LunaFirebase.signUp(email, password);
-            userId = cred.user.uid;
-            user = { id: userId, username: email, name, pin: null };
-            await window.LunaFirebase.setUserDoc(userId, {
-              profile: { quickPin: null, name, avgCycleLength: 28, avgPeriodDuration: 5 },
-              cycles: db.cycles,
-              logs: db.logs
-            });
-          } catch (signUpErr) {
-            // If already exists in Firebase, sign in
-            const cred = await window.LunaFirebase.signIn(email, password);
-            userId = cred.user.uid;
-            user = { id: userId, username: email, name, pin: null };
-          }
-        } else {
-          const cred = await window.LunaFirebase.signIn(email, password);
-          userId = cred.user.uid;
-          user = { id: userId, username: email, name, pin: null };
-        }
-
-        // Always pull latest cloud data on login so second phone instantly gets everything
-        const docSnap = await window.LunaFirebase.getUserDoc(userId);
-        if (docSnap.exists()) {
-          const cloudData = docSnap.data();
-          if (cloudData.cycles) db.cycles = cloudData.cycles;
-          if (cloudData.logs) db.logs = cloudData.logs;
-          if (cloudData.profile) db.profile = cloudData.profile;
-          saveClientDb(db);
-        } else {
-          // If first time cloud init, push local initial seed to cloud
-          await window.LunaFirebase.setUserDoc(userId, {
-            cycles: db.cycles,
-            logs: db.logs,
-            profile: db.profile
-          });
-        }
-      } catch (fbErr) {
-        console.warn('Firebase auth note:', fbErr.message);
+    // Check Cloud for existing account data
+    if (window.LunaCloudSync) {
+      const cloudData = await window.LunaCloudSync.loadUserData(email);
+      if (cloudData) {
+        if (cloudData.cycles) db.cycles = cloudData.cycles;
+        if (cloudData.logs) db.logs = cloudData.logs;
+        if (cloudData.profile) db.profile = cloudData.profile;
+        saveClientDb(db);
       }
     }
 
     const token = 'token_' + userId;
-    let existing = db.users.find(u => u.id === userId || u.username === email);
+    let existing = db.users.find(u => u.username === email);
     if (!existing) {
       db.users.push(user);
     } else {
-      existing.id = userId;
       user = existing;
     }
     saveClientDb(db);
@@ -319,7 +370,9 @@ async function handleClientStorageFallback(path, options = {}) {
     state.user = user;
     state.token = token;
     state.profile = db.profile;
-    initFirebaseRealtimeListener();
+
+    // Push initial sync
+    pushToCloudSync();
 
     return { token, user, hasPin, message: 'Success' };
   }
@@ -362,7 +415,7 @@ async function handleClientStorageFallback(path, options = {}) {
     };
     db.cycles.push(cycle);
     saveClientDb(db);
-    pushToFirebaseCloud();
+    pushToCloudSync();
     return { cycle, stats: computeClientStats(db) };
   }
 
@@ -375,7 +428,7 @@ async function handleClientStorageFallback(path, options = {}) {
       if (body.endDate !== undefined) c.endDate = body.endDate;
       if (body.notes !== undefined) c.notes = body.notes;
       saveClientDb(db);
-      pushToFirebaseCloud();
+      pushToCloudSync();
       return { cycle: c, stats: computeClientStats(db) };
     }
     throw new Error('Cycle not found');
@@ -385,7 +438,7 @@ async function handleClientStorageFallback(path, options = {}) {
     const id = path.split('/')[3];
     db.cycles = db.cycles.filter(item => item.id !== id);
     saveClientDb(db);
-    pushToFirebaseCloud();
+    pushToCloudSync();
     return { success: true, stats: computeClientStats(db) };
   }
 
@@ -397,7 +450,7 @@ async function handleClientStorageFallback(path, options = {}) {
     const date = body.date;
     db.logs[date] = { ...body, updatedAt: new Date().toISOString() };
     saveClientDb(db);
-    pushToFirebaseCloud();
+    pushToCloudSync();
     return { log: db.logs[date], stats: computeClientStats(db) };
   }
 
@@ -408,14 +461,14 @@ async function handleClientStorageFallback(path, options = {}) {
   if (path === '/api/profile/pin') {
     db.profile.quickPin = body.pin ? String(body.pin).trim() : null;
     saveClientDb(db);
-    pushToFirebaseCloud();
+    pushToCloudSync();
     return { success: true };
   }
 
   if (path === '/api/profile' && method === 'PUT') {
     db.profile = { ...(db.profile || {}), ...body };
     saveClientDb(db);
-    pushToFirebaseCloud();
+    pushToCloudSync();
     return { success: true, profile: db.profile };
   }
 
