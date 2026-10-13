@@ -608,14 +608,22 @@ function logout() {
 }
 
 // ================= PIN Screen Handlers =================
+let isVerifyingPin = false;
+
 function showPinScreen() {
   state.pinEntered = '';
+  isVerifyingPin = false;
   updatePinDots();
-  document.getElementById('pin-overlay').classList.add('active');
+  const overlay = document.getElementById('pin-overlay');
+  if (overlay) overlay.classList.add('active');
 }
 
 function hidePinScreen() {
-  document.getElementById('pin-overlay').classList.remove('active');
+  state.pinEntered = '';
+  isVerifyingPin = false;
+  updatePinDots();
+  const overlay = document.getElementById('pin-overlay');
+  if (overlay) overlay.classList.remove('active');
 }
 
 function updatePinDots() {
@@ -627,33 +635,52 @@ function updatePinDots() {
 }
 
 async function handlePinKey(digit) {
-  haptic(25);
+  if (isVerifyingPin) return;
+  haptic(20);
+
   if (digit === 'DEL') {
     state.pinEntered = state.pinEntered.slice(0, -1);
     updatePinDots();
     return;
   }
+
   if (state.pinEntered.length < 4) {
-    state.pinEntered += digit;
+    state.pinEntered += String(digit);
     updatePinDots();
   }
+
   if (state.pinEntered.length === 4) {
-    try {
-      const res = await api('/api/auth/verify-pin', {
-        method: 'POST',
-        body: JSON.stringify({ pin: state.pinEntered })
-      });
-      if (res.success) {
-        hidePinScreen();
-        hideAuthView();
-        await loadInitialData();
+    isVerifyingPin = true;
+    const pinToTest = state.pinEntered;
+
+    // Small delay so user sees 4th dot fill before verifying
+    setTimeout(async () => {
+      try {
+        const res = await api('/api/auth/verify-pin', {
+          method: 'POST',
+          body: JSON.stringify({ pin: pinToTest })
+        });
+
+        if (res && res.success) {
+          hidePinScreen();
+          hideAuthView();
+          await loadInitialData();
+        } else {
+          throw new Error('Incorrect PIN');
+        }
+      } catch (err) {
+        haptic([80, 50, 80]);
+        const digitsWrap = document.querySelector('.pin-digits');
+        if (digitsWrap) {
+          digitsWrap.classList.add('shake');
+          setTimeout(() => digitsWrap.classList.remove('shake'), 450);
+        }
+        showToast('Incorrect 4-digit PIN. Please try again.');
+        state.pinEntered = '';
+        isVerifyingPin = false;
+        updatePinDots();
       }
-    } catch (err) {
-      haptic([100, 50, 100]);
-      showToast('Incorrect PIN. Try again.');
-      state.pinEntered = '';
-      updatePinDots();
-    }
+    }, 60);
   }
 }
 

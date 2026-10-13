@@ -962,22 +962,27 @@ input[type="range"].pain-range {
   position: fixed;
   inset: 0;
   background: var(--bg-main);
-  z-index: 200;
-  display: none;
+  z-index: 250;
+  opacity: 0;
+  pointer-events: none;
+  display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 24px;
+  transition: opacity 0.25s ease;
+  overflow-y: auto;
 }
 
 .pin-screen-overlay.active {
-  display: flex;
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .pin-digits {
   display: flex;
-  gap: 14px;
-  margin: 24px 0 36px;
+  gap: 16px;
+  margin: 24px 0 32px;
 }
 
 .pin-dot {
@@ -985,18 +990,21 @@ input[type="range"].pain-range {
   height: 18px;
   border-radius: 50%;
   border: 2px solid var(--primary);
-  transition: background 0.15s ease;
+  background: transparent;
+  transition: all 0.15s ease;
 }
 
 .pin-dot.filled {
   background: var(--primary);
+  transform: scale(1.1);
 }
 
 .pin-pad-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 18px;
+  gap: 16px;
   width: 270px;
+  max-width: 90vw;
 }
 
 .pin-key {
@@ -1013,12 +1021,25 @@ input[type="range"].pain-range {
   justify-content: center;
   cursor: pointer;
   box-shadow: var(--shadow-sm);
-  transition: transform 0.1s ease;
+  transition: transform 0.1s ease, background 0.15s ease;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
 }
 
 .pin-key:active {
-  transform: scale(0.92);
+  transform: scale(0.9);
   background: var(--primary-light);
+}
+
+@keyframes pinShake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-10px); }
+  40%, 80% { transform: translateX(10px); }
+}
+
+.pin-digits.shake {
+  animation: pinShake 0.4s ease;
 }
 
 /* ================= Toast Notification ================= */
