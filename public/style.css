@@ -1347,6 +1347,151 @@ input[type="range"].pain-range {
   color: var(--text-muted);
 }
 
+/* ================= New Feature Styles ================= */
+/* Stealth Calculator Overlay */
+.calculator-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: #111827;
+  color: #fff;
+  display: none;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 20px 24px calc(24px + var(--safe-bottom)) 24px;
+}
+
+.calculator-overlay.active {
+  display: flex;
+}
+
+.calc-display {
+  font-size: 3.2rem;
+  font-weight: 300;
+  text-align: right;
+  padding: 20px 10px;
+  min-height: 90px;
+  word-break: break-all;
+  font-family: monospace;
+  color: #f9fafb;
+}
+
+.calc-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.calc-btn {
+  height: 68px;
+  border-radius: var(--radius-full);
+  border: none;
+  font-size: 1.5rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: #374151;
+  color: #f9fafb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.15s, transform 0.1s;
+  user-select: none;
+}
+
+.calc-btn:active {
+  opacity: 0.7;
+  transform: scale(0.96);
+}
+
+.calc-btn.op {
+  background: #f59e0b;
+  color: #fff;
+  font-size: 1.7rem;
+}
+
+.calc-btn.fn {
+  background: #9ca3af;
+  color: #111827;
+}
+
+.calc-btn.zero {
+  grid-column: span 2;
+  border-radius: 40px;
+  justify-content: flex-start;
+  padding-left: 28px;
+}
+
+/* PCOS & Hormonal Health Card */
+.pcos-score-card {
+  background: linear-gradient(135deg, rgba(236, 72, 153, 0.08), rgba(139, 92, 246, 0.08));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.pcos-meter-wrap {
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: var(--radius-full);
+  height: 8px;
+  overflow: hidden;
+  margin: 10px 0;
+}
+
+.pcos-meter-bar {
+  height: 100%;
+  border-radius: var(--radius-full);
+  transition: width 0.4s ease;
+}
+
+/* Daily Pill Reminder Checklist */
+.pill-streak-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.pill-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.pill-item-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+/* TTC Mode Toggle Badge */
+.mode-toggle-pill {
+  display: inline-flex;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  padding: 3px;
+  gap: 4px;
+}
+
+.mode-toggle-opt {
+  padding: 5px 12px;
+  border-radius: var(--radius-full);
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: all 0.2s;
+}
+
+.mode-toggle-opt.active {
+  background: var(--primary);
+  color: #fff;
+  box-shadow: var(--shadow-sm);
+}
+
 /* Print Doctor Report */
 @media print {
   body {
@@ -1366,3 +1511,4 @@ input[type="range"].pain-range {
     page-break-inside: avoid;
   }
 }
+

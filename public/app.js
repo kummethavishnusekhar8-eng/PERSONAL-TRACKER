@@ -38,11 +38,19 @@ const state = {
     medications: ['Iron Supplement'],
     bbt: '',
     cervicalFluid: 'none',
+    sleepHours: 7.5,
+    energyLevel: 'normal',
+    intimacy: [],
     notes: ''
   },
   pinEntered: '',
   hasPin: false,
-  networkUrls: []
+  networkUrls: [],
+  trackerMode: localStorage.getItem('lunacare_mode') || 'period', // 'period' or 'ttc'
+  calcInput: '0',
+  calcPrev: null,
+  calcOp: null,
+  calcClearOnNext: false
 };
 
 // API Helper with full Netlify / Serverless Offline LocalStorage fallback
@@ -559,7 +567,46 @@ function computeClientStats(db) {
       mealsTracked++;
       if (l.meals.breakfast && l.meals.lunch && l.meals.dinner) fullMealsEaten++;
     }
-  });
+  // PCOS / Hormonal Health Calculation
+  // Flags: cycle gaps > 35 days, high variability (stdev > 6), severe acne or hirsutism, missing periods
+  let pcosScore = 15; // default 15% baseline optimal
+  let pcosTitle = "Optimal Regular Hormonal Health";
+  let pcosDesc = "Cycle interval (21–35 days) and flow are within healthy gynecological ranges.";
+  let pcosBadge = "Optimal";
+  let pcosColor = "#10b981";
+
+  if (gaps.length >= 2) {
+    const minGap = Math.min(...gaps);
+    const maxGap = Math.max(...gaps);
+    const gapDiff = maxGap - minGap;
+
+    if (avgCycleGap > 36 || gapDiff >= 10) {
+      pcosScore = Math.min(85, 45 + gapDiff * 3);
+      pcosTitle = "Cycle Variability Detected (PCOS / Hormonal Flag)";
+      pcosDesc = `Cycle interval variations (${minGap} to ${maxGap} days) detected. Recommend tracking ovulation and discussing with a doctor.`;
+      pcosBadge = "Needs Review";
+      pcosColor = "#f59e0b";
+    }
+    if (avgCycleGap > 45) {
+      pcosScore = 85;
+      pcosTitle = "High Irregularity / Oligomenorrhea Flag";
+      pcosDesc = "Cycles are exceeding 45+ days. Recommended to consult a gynecologist for hormone evaluation.";
+      pcosBadge = "High Variation";
+      pcosColor = "#ef4444";
+    }
+  }
+
+  // Medication Streaks
+  let pillStreak = 0;
+  const sortedDates = Object.keys(logs).sort().reverse();
+  for (let d of sortedDates) {
+    const l = logs[d];
+    if (l.medications && l.medications.length > 0) {
+      pillStreak++;
+    } else {
+      break;
+    }
+  }
 
   return {
     avgCycleGap,
@@ -571,7 +618,9 @@ function computeClientStats(db) {
     nextPredictedStart,
     daysUntilNextPeriod,
     fertileWindow: { start: fertileStart, end: fertileEnd, ovulationDate },
-    irregularity: { isIrregular: false, reason: '', talkingPoints: [] },
+    irregularity: { isIrregular: pcosScore > 40, reason: pcosDesc, talkingPoints: [] },
+    pcos: { score: pcosScore, title: pcosTitle, desc: pcosDesc, badge: pcosBadge, color: pcosColor },
+    pillStreak: Math.max(1, pillStreak),
     pads: { total: totalPads, avgPerDay: Math.round(totalPads / Math.max(1, Object.keys(logs).length)) },
     pain: { avgLevel: painCount > 0 ? (painSum / painCount).toFixed(1) : 0, totalEntries: painCount },
     moodCounts,
@@ -906,6 +955,74 @@ function renderHome() {
     if (todayWaterEl) todayWaterEl.textContent = '1.5 L';
   }
 
+  // Render TTC Conception Mode vs Period Mode
+  const ttcBanner = document.getElementById('home-ttc-banner');
+  const optPeriod = document.getElementById('mode-opt-period');
+  const optTtc = document.getElementById('mode-opt-ttc');
+  if (optPeriod && optTtc) {
+    if (state.trackerMode === 'ttc') {
+      optTtc.classList.add('active');
+      optPeriod.classList.remove('active');
+      if (ttcBanner) {
+        ttcBanner.style.display = 'block';
+        const ttcChance = document.getElementById('ttc-chance-text');
+        const ttcAdvice = document.getElementById('ttc-advice-text');
+        if (currCycleDay >= 10 && currCycleDay <= 17) {
+          ttcChance.textContent = '🌟 Peak Conception Window';
+          ttcAdvice.textContent = 'High fertility probability. Ovulation surge occurs around this window.';
+        } else if (currCycleDay < 10) {
+          ttcChance.textContent = '🌱 Low Conception Probability';
+          ttcAdvice.textContent = 'Pre-ovulation follicular development. Conception window begins in a few days.';
+        } else {
+          ttcChance.textContent = '🌙 Post-Ovulation Phase';
+          ttcAdvice.textContent = 'Luteal phase. Fertile window closed for this cycle.';
+        }
+      }
+    } else {
+      optPeriod.classList.add('active');
+      optTtc.classList.remove('active');
+      if (ttcBanner) ttcBanner.style.display = 'none';
+    }
+  }
+
+  // Render PCOS & Hormonal Health Score Card
+  const pcosTitleEl = document.getElementById('pcos-status-title');
+  const pcosBadgeEl = document.getElementById('pcos-badge-pill');
+  const pcosFillEl = document.getElementById('pcos-meter-fill');
+  const pcosDescEl = document.getElementById('pcos-desc-text');
+  if (pcosTitleEl && stats.pcos) {
+    pcosTitleEl.textContent = stats.pcos.title;
+    pcosBadgeEl.textContent = stats.pcos.badge;
+    pcosBadgeEl.style.background = stats.pcos.color + '22';
+    pcosBadgeEl.style.color = stats.pcos.color;
+    pcosFillEl.style.width = stats.pcos.score + '%';
+    pcosFillEl.style.background = stats.pcos.color;
+    pcosDescEl.textContent = stats.pcos.desc;
+  }
+
+  // Render Pill Reminder & Streak Checklist
+  const streakCountEl = document.getElementById('pill-streak-count');
+  const pillChecklistEl = document.getElementById('pill-checklist-items');
+  if (streakCountEl && stats.pillStreak) {
+    streakCountEl.textContent = `${stats.pillStreak}-Day Streak 🔥`;
+  }
+  if (pillChecklistEl) {
+    const defaultMeds = ['Birth Control Pill', 'Iron Supplement', 'Multivitamin'];
+    const takenMeds = todayLog?.medications || [];
+    pillChecklistEl.innerHTML = defaultMeds.map(med => {
+      const isTaken = takenMeds.includes(med);
+      return `
+        <div class="pill-item-row">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <input type="checkbox" ${isTaken ? 'checked' : ''} onchange="togglePillTaken('${med}', this.checked)" style="width:18px; height:18px; accent-color:var(--primary); cursor:pointer;">
+            <span style="font-size:0.86rem; font-weight:${isTaken ? '700' : '500'}; color:${isTaken ? 'var(--text-main)' : 'var(--text-muted)'}; text-decoration:${isTaken ? 'line-through' : 'none'};">${med}</span>
+          </div>
+          <span style="font-size:0.75rem; color:${isTaken ? 'var(--success)' : 'var(--text-muted)'}; font-weight:700;">${isTaken ? '✓ Taken' : 'Pending'}</span>
+        </div>
+      `;
+    }).join('');
+  }
+
   // Render Irregularity Health Alert Banner
   const alertEl = document.getElementById('home-irregular-alert');
   if (alertEl) {
@@ -924,31 +1041,62 @@ function renderHome() {
 
   // Render Dynamic Phase Wellness & Nutrition Advice Card
   const wellnessEl = document.getElementById('home-phase-wellness');
-  if (wellnessEl && stats.phaseAdvice) {
+  if (wellnessEl) {
+    let advice = {
+      title: "🌸 Menstrual Phase Care",
+      foods: "Iron-rich spinach, dark chocolate, hot soups, turmeric",
+      workout: "Rest, gentle pelvic stretches, slow walks",
+      selfCare: "Warm bath, heating pad on abdomen, early sleep"
+    };
+    if (!stats.isCurrentlyOnPeriod) {
+      if (currCycleDay <= 13) {
+        advice = {
+          title: "🌱 Follicular Phase Energy",
+          foods: "Fermented kimchi/yogurt, lean proteins, avocados, pumpkin seeds",
+          workout: "HIIT, cardio, strength training (peak energy window)",
+          selfCare: "Set monthly goals, plan social catchups and new projects"
+        };
+      } else if (currCycleDay <= 16) {
+        advice = {
+          title: "✨ Ovulation Window Glow",
+          foods: "Berries, antioxidant-rich fruits, zinc, fresh leafy greens",
+          workout: "Running, circuit workouts, high-intensity movement",
+          selfCare: "Highest confidence and social vitality of the cycle"
+        };
+      } else {
+        advice = {
+          title: "🌙 Luteal Phase Calming",
+          foods: "Magnesium rich nuts, sweet potatoes, complex carbs (calms cravings)",
+          workout: "Pilates, yoga, light resistance training",
+          selfCare: "Hydration to ease bloating, boundary setting, calming bedtime tea"
+        };
+      }
+    }
+
     wellnessEl.innerHTML = `
       <div class="phase-wellness-header">
-        <div class="phase-wellness-title">${stats.phaseAdvice.title}</div>
+        <div class="phase-wellness-title">${advice.title}</div>
       </div>
       <div class="wellness-grid">
         <div class="wellness-row">
           <span class="wellness-icon">🥑</span>
           <div class="wellness-body">
             <span class="wellness-tag">Nourishing Foods</span>
-            <span>${stats.phaseAdvice.foods}</span>
+            <span>${advice.foods}</span>
           </div>
         </div>
         <div class="wellness-row">
           <span class="wellness-icon">🧘‍♀️</span>
           <div class="wellness-body">
             <span class="wellness-tag">Movement & Energy</span>
-            <span>${stats.phaseAdvice.workout}</span>
+            <span>${advice.workout}</span>
           </div>
         </div>
         <div class="wellness-row">
           <span class="wellness-icon">🌙</span>
           <div class="wellness-body">
             <span class="wellness-tag">Self-Care & Mind</span>
-            <span>${stats.phaseAdvice.selfCare}</span>
+            <span>${advice.selfCare}</span>
           </div>
         </div>
       </div>
@@ -1250,6 +1398,18 @@ function populateLogModalForm() {
   document.getElementById('log-input-bbt').value = form.bbt || '';
   document.getElementById('cervical-fluid-select').value = form.cervicalFluid || 'none';
 
+  // Sleep & Energy
+  const sleepEl = document.getElementById('log-input-sleep');
+  if (sleepEl) sleepEl.value = form.sleepHours !== undefined ? form.sleepHours : 7.5;
+  const energyEl = document.getElementById('log-input-energy');
+  if (energyEl) energyEl.value = form.energyLevel || 'normal';
+
+  // Intimacy
+  document.querySelectorAll('#intimacy-chips .select-chip').forEach(chip => {
+    const val = chip.getAttribute('data-val');
+    chip.classList.toggle('active', (form.intimacy || []).includes(val));
+  });
+
   // Notes
   document.getElementById('log-input-notes').value = form.notes || '';
 }
@@ -1373,6 +1533,10 @@ async function saveLogForm() {
   const bbtVal = document.getElementById('log-input-bbt').value;
   state.activeLogForm.bbt = bbtVal ? Number(bbtVal) : null;
   state.activeLogForm.cervicalFluid = document.getElementById('cervical-fluid-select').value;
+
+  const sleepVal = document.getElementById('log-input-sleep')?.value;
+  state.activeLogForm.sleepHours = sleepVal ? Number(sleepVal) : 7.5;
+  state.activeLogForm.energyLevel = document.getElementById('log-input-energy')?.value || 'normal';
 
   try {
     const res = await api('/api/logs', {
@@ -1915,9 +2079,220 @@ function toggleTheme() {
   localStorage.setItem('lunacare_theme', next);
 }
 
-// Initialize theme from storage
-const savedTheme = localStorage.getItem('lunacare_theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-document.documentElement.setAttribute('data-theme', savedTheme);
+// ================= New Feature Handlers =================
+
+// 1. Tracker Mode Toggle (Period vs TTC Conception Mode)
+function switchTrackerMode(mode) {
+  haptic(25);
+  state.trackerMode = mode;
+  localStorage.setItem('lunacare_mode', mode);
+  renderHome();
+  showToast(mode === 'ttc' ? '👶 Conception / TTC Mode Activated' : '🩸 Period Tracking Mode Activated');
+}
+
+// 2. Daily Pill Checklist Toggle
+async function togglePillTaken(medName, isChecked) {
+  haptic(25);
+  const todayStr = new Date().toISOString().split('T')[0];
+  const db = getClientDb();
+  if (!db.logs[todayStr]) {
+    db.logs[todayStr] = {
+      date: todayStr,
+      time: new Date().toTimeString().slice(0, 5),
+      medications: [],
+      updatedAt: new Date().toISOString()
+    };
+  }
+  let meds = db.logs[todayStr].medications || [];
+  if (isChecked) {
+    if (!meds.includes(medName)) meds.push(medName);
+  } else {
+    meds = meds.filter(m => m !== medName);
+  }
+  db.logs[todayStr].medications = meds;
+  saveClientDb(db);
+  state.logs = db.logs;
+  state.stats = computeClientStats(db);
+  renderHome();
+  pushToCloudSync();
+  showToast(isChecked ? `✓ Marked ${medName} as taken today!` : `Unmarked ${medName}`);
+}
+
+// 3. Stealth Calculator Disguise
+function toggleStealthCalculator() {
+  haptic(30);
+  const overlay = document.getElementById('calculator-overlay');
+  if (!overlay) return;
+  overlay.classList.toggle('active');
+  state.calcInput = '0';
+  state.calcPrev = null;
+  state.calcOp = null;
+  state.calcClearOnNext = false;
+  document.getElementById('calc-display').textContent = '0';
+}
+
+function handleCalcKey(key) {
+  haptic(15);
+  const display = document.getElementById('calc-display');
+  const currentPin = state.profile?.quickPin || '1234';
+
+  if (key === 'C') {
+    state.calcInput = '0';
+    state.calcPrev = null;
+    state.calcOp = null;
+    display.textContent = '0';
+    return;
+  }
+
+  if (key === '±') {
+    state.calcInput = String(-Number(state.calcInput));
+    display.textContent = state.calcInput;
+    return;
+  }
+
+  if (key === '%') {
+    state.calcInput = String(Number(state.calcInput) / 100);
+    display.textContent = state.calcInput;
+    return;
+  }
+
+  if (['+', '-', '*', '/'].includes(key)) {
+    state.calcPrev = Number(state.calcInput);
+    state.calcOp = key;
+    state.calcClearOnNext = true;
+    return;
+  }
+
+  if (key === '=') {
+    // Secret backdoor check: if typed number matches 4-digit quick PIN, unlock LunaCare!
+    if (state.calcInput === currentPin) {
+      toggleStealthCalculator();
+      showToast('🌸 Stealth Mode Unlocked!');
+      return;
+    }
+
+    if (state.calcOp && state.calcPrev !== null) {
+      const cur = Number(state.calcInput);
+      let result = 0;
+      if (state.calcOp === '+') result = state.calcPrev + cur;
+      if (state.calcOp === '-') result = state.calcPrev - cur;
+      if (state.calcOp === '*') result = state.calcPrev * cur;
+      if (state.calcOp === '/') result = cur !== 0 ? state.calcPrev / cur : 'Error';
+
+      state.calcInput = String(result);
+      display.textContent = state.calcInput;
+      state.calcOp = null;
+      state.calcPrev = null;
+      state.calcClearOnNext = true;
+    }
+    return;
+  }
+
+  // Digits & Dot
+  if (state.calcClearOnNext || state.calcInput === '0') {
+    state.calcInput = key === '.' ? '0.' : key;
+    state.calcClearOnNext = false;
+  } else {
+    if (key === '.' && state.calcInput.includes('.')) return;
+    if (state.calcInput.length < 10) state.calcInput += key;
+  }
+  display.textContent = state.calcInput;
+}
+
+// 4. Emergency SOS Cramp / Supply Alert
+function triggerSosAlert() {
+  haptic([100, 50, 100]);
+  const msg = encodeURIComponent("🚨 LunaCare Emergency Alert: I'm currently having severe cramps / urgent need for period care supplies. Please reach out or check on me!");
+  const choice = confirm("🚨 Trigger Emergency SOS Alert?\n\nThis opens WhatsApp / Message to quickly notify your emergency contact or partner for help or period supplies.");
+  if (choice) {
+    window.open(`https://wa.me/?text=${msg}`, '_blank');
+  }
+}
+
+// 5. Gynecologist WhatsApp Summary Share
+function shareDoctorWhatsApp() {
+  haptic(25);
+  const stats = state.stats;
+  if (!stats) return;
+  const name = state.user?.name || state.profile?.name || 'Patient';
+  const text = encodeURIComponent(
+    `🩺 *LunaCare Gynecologist Health Summary*\n` +
+    `👤 Patient: ${name}\n` +
+    `🩸 Cycle Interval: ${stats.avgCycleGap || 28} Days\n` +
+    `📅 Period Duration: ${stats.avgPeriodDuration || 5} Days\n` +
+    `⚡ Avg Cramp Pain: ${stats.pain?.avgLevel || 0}/10\n` +
+    `💧 Water Regularity: ${stats.pads?.total || 0} pads total\n` +
+    `📊 Hormonal Status: ${stats.pcos?.title || 'Regular'}\n` +
+    `Generated privately from LunaCare Health OS.`
+  );
+  window.open(`https://wa.me/?text=${text}`, '_blank');
+}
+
+// 6. LunaCare Partner Mode
+function openPartnerShareModal() {
+  haptic(20);
+  const stats = state.stats;
+  const currCycleDay = stats?.currentCycleDay || 1;
+  const titleEl = document.getElementById('partner-phase-title');
+  const descEl = document.getElementById('partner-tips-desc');
+
+  if (stats?.isCurrentlyOnPeriod) {
+    titleEl.textContent = `Menstrual Phase (Day ${currCycleDay})`;
+    descEl.textContent = "Experiencing cramps & lower energy. Extra care, warm tea, heating pads, patience and dark chocolate appreciated!";
+  } else if (currCycleDay <= 13) {
+    titleEl.textContent = `Follicular Phase (Day ${currCycleDay})`;
+    descEl.textContent = "Energy and mood are rising! Great time for fun activities, date nights, and collaborative planning.";
+  } else if (currCycleDay <= 16) {
+    titleEl.textContent = `Ovulation Window (Day ${currCycleDay})`;
+    descEl.textContent = "Peak vitality, highest confidence and social energy of the month!";
+  } else {
+    titleEl.textContent = `Luteal Phase (Day ${currCycleDay})`;
+    descEl.textContent = "Approaching PMS window. May experience mood shifts or bloating. Gentle words, cozy comfort and kindness mean the world!";
+  }
+  document.getElementById('partner-share-modal').classList.add('open');
+}
+
+function closePartnerShareModal() {
+  document.getElementById('partner-share-modal').classList.remove('open');
+}
+
+function getPartnerUpdateText() {
+  const stats = state.stats;
+  const currCycleDay = stats?.currentCycleDay || 1;
+  const name = state.user?.name || 'Your partner';
+  let phaseName = 'Menstrual Phase';
+  let tip = 'warm comfort & chocolate';
+  if (stats?.isCurrentlyOnPeriod) {
+    phaseName = `Menstrual Phase (Day ${currCycleDay})`;
+    tip = 'warm drinks, heating pads & gentle hugs 🍫';
+  } else if (currCycleDay <= 13) {
+    phaseName = `Follicular Phase (Day ${currCycleDay})`;
+    tip = 'high energy & exciting plans together ✨';
+  } else if (currCycleDay <= 16) {
+    phaseName = `Ovulation Window (Day ${currCycleDay})`;
+    tip = 'glowing vitality & quality time 🌸';
+  } else {
+    phaseName = `Luteal Phase (Day ${currCycleDay})`;
+    tip = 'cozy comfort, listening ears & patience 🌙';
+  }
+  return `💕 LunaCare Partner Update from ${name}:\nI'm currently in my *${phaseName}*.\nBest way to support me today: ${tip}`;
+}
+
+function copyPartnerUpdate() {
+  haptic(25);
+  const txt = getPartnerUpdateText();
+  navigator.clipboard.writeText(txt).then(() => {
+    showToast('📋 Partner update copied to clipboard!');
+  }).catch(() => {
+    prompt('Copy this partner update:', txt);
+  });
+}
+
+function sharePartnerWhatsApp() {
+  haptic(25);
+  const txt = encodeURIComponent(getPartnerUpdateText());
+  window.open(`https://wa.me/?text=${txt}`, '_blank');
+}
 
 // ================= Event Listeners Initialization =================
 window.addEventListener('DOMContentLoaded', () => {

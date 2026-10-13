@@ -53,6 +53,35 @@
         Sign in with Gmail/Password on this device
       </a>
     </div>
+  <!-- Stealth Calculator Mode Overlay (Disguises App as a Functional Calculator) -->
+  <div id="calculator-overlay" class="calculator-overlay">
+    <div style="font-size:0.75rem; color:#6b7280; text-align:right; margin-bottom:4px;">CALCULATOR</div>
+    <div id="calc-display" class="calc-display">0</div>
+    <div class="calc-grid">
+      <button class="calc-btn fn" onclick="handleCalcKey('C')">C</button>
+      <button class="calc-btn fn" onclick="handleCalcKey('±')">±</button>
+      <button class="calc-btn fn" onclick="handleCalcKey('%')">%</button>
+      <button class="calc-btn op" onclick="handleCalcKey('/')">÷</button>
+
+      <button class="calc-btn" onclick="handleCalcKey('7')">7</button>
+      <button class="calc-btn" onclick="handleCalcKey('8')">8</button>
+      <button class="calc-btn" onclick="handleCalcKey('9')">9</button>
+      <button class="calc-btn op" onclick="handleCalcKey('*')">×</button>
+
+      <button class="calc-btn" onclick="handleCalcKey('4')">4</button>
+      <button class="calc-btn" onclick="handleCalcKey('5')">5</button>
+      <button class="calc-btn" onclick="handleCalcKey('6')">6</button>
+      <button class="calc-btn op" onclick="handleCalcKey('-')">−</button>
+
+      <button class="calc-btn" onclick="handleCalcKey('1')">1</button>
+      <button class="calc-btn" onclick="handleCalcKey('2')">2</button>
+      <button class="calc-btn" onclick="handleCalcKey('3')">3</button>
+      <button class="calc-btn op" onclick="handleCalcKey('+')">+</button>
+
+      <button class="calc-btn zero" onclick="handleCalcKey('0')">0</button>
+      <button class="calc-btn" onclick="handleCalcKey('.')">.</button>
+      <button class="calc-btn op" onclick="handleCalcKey('=')">=</button>
+    </div>
   </div>
 
   <div id="app-container">
@@ -67,6 +96,14 @@
         </div>
       </div>
       <div class="header-actions">
+        <!-- Emergency SOS Button -->
+        <button class="btn-icon" onclick="triggerSosAlert()" style="color:#ef4444;" title="Emergency SOS Cramp / Supply Alert">
+          🆘
+        </button>
+        <!-- Stealth Calculator Disguise Mode -->
+        <button class="btn-icon" onclick="toggleStealthCalculator()" title="Stealth Calculator Disguise">
+          🔢
+        </button>
         <!-- Wi-Fi / Phone QR Link Pill -->
         <button id="header-wifi-pill" class="wifi-pill" style="display:none;" onclick="openPhoneConnectModal()" title="Connect Mobile Phone">
           <span class="pulse"></span> Phone
@@ -174,6 +211,57 @@
           <div class="quick-action-btn" onclick="openDoctorReport()">
             <span class="quick-action-icon">📋</span>
             <span class="quick-action-label">Doctor Report</span>
+          </div>
+        </div>
+
+        <!-- Mode Toggle: Period Tracking vs Trying To Conceive (TTC) -->
+        <div style="display:flex; justify-content:center; margin-bottom:12px;">
+          <div class="mode-toggle-pill">
+            <span id="mode-opt-period" class="mode-toggle-opt active" onclick="switchTrackerMode('period')">🩸 Period & Cycle Mode</span>
+            <span id="mode-opt-ttc" class="mode-toggle-opt" onclick="switchTrackerMode('ttc')">👶 Conception / TTC Mode</span>
+          </div>
+        </div>
+
+        <!-- Trying to Conceive (TTC) Dynamic Fertility Banner -->
+        <div id="home-ttc-banner" class="card" style="display:none; background:linear-gradient(135deg, #fdf4ff, #fae8ff); border:1px solid #f0abfc;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <div style="font-size:0.75rem; font-weight:800; color:#c026d3; text-transform:uppercase;">Fertility & Ovulation Tracker</div>
+              <h3 id="ttc-chance-text" style="font-size:1.15rem; font-weight:900; color:#86198f; margin:2px 0;">Peak Conception Window</h3>
+              <p id="ttc-advice-text" style="font-size:0.8rem; color:#701a75;">High chance of pregnancy today. Ovulation predicted around fertile window.</p>
+            </div>
+            <span style="font-size:2.2rem;">✨</span>
+          </div>
+        </div>
+
+        <!-- PCOS & Hormonal Health Score Card -->
+        <div id="home-pcos-card" class="pcos-score-card">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <div style="font-size:0.75rem; font-weight:800; text-transform:uppercase; color:var(--secondary);">Hormonal Health Assessment</div>
+              <h4 id="pcos-status-title" style="font-size:1rem; font-weight:900; margin:2px 0;">Healthy Regular Cycle</h4>
+            </div>
+            <span id="pcos-badge-pill" class="diff-badge diff-better">Optimal</span>
+          </div>
+          <div class="pcos-meter-wrap">
+            <div id="pcos-meter-fill" class="pcos-meter-bar" style="width:15%; background:#10b981;"></div>
+          </div>
+          <p id="pcos-desc-text" style="font-size:0.78rem; color:var(--text-muted); margin:0;">
+            Cycle length and symptoms are within optimal range (21–35 days).
+          </p>
+        </div>
+
+        <!-- Daily Pill & Medication Streak Checklist -->
+        <div class="pill-streak-card">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <div style="display:flex; align-items:center; gap:6px;">
+              <span style="font-size:1.1rem;">💊</span>
+              <h4 style="font-size:0.95rem; font-weight:800;">Daily Medication Streak</h4>
+            </div>
+            <span id="pill-streak-count" style="font-size:0.78rem; font-weight:700; color:var(--primary); background:var(--primary-light); padding:2px 8px; border-radius:12px;">3-Day Streak 🔥</span>
+          </div>
+          <div id="pill-checklist-items">
+            <!-- Dynamic pills populated by app.js -->
           </div>
         </div>
 
@@ -356,8 +444,14 @@
             <button class="btn btn-secondary" onclick="toggleQuickPin()">
               🔒 Set / Change 4-Digit Quick PIN Lock
             </button>
+            <button class="btn btn-secondary" onclick="toggleStealthCalculator()">
+              🔢 Test Stealth Calculator Disguise
+            </button>
+            <button class="btn btn-secondary" onclick="openPartnerShareModal()">
+              💕 LunaCare Partner Mode (Phase Sharing)
+            </button>
             <button class="btn btn-secondary" onclick="openDoctorReport()">
-              🩺 Generate Gynecologist Health Report
+              🩺 Gynecologist Health Report & WhatsApp Share
             </button>
             <button class="btn btn-secondary" onclick="downloadCsvReport()">
               📥 Download Health Records (CSV)
@@ -605,6 +699,32 @@
             <option value="watery">Watery</option>
           </select>
         </div>
+      <!-- 8. Sleep & Energy Tracking -->
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px;">
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label">Sleep (Hours)</label>
+          <input type="number" step="0.5" id="log-input-sleep" class="input-text" placeholder="e.g. 7.5">
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label">Energy Level</label>
+          <select id="log-input-energy" class="input-select">
+            <option value="high">⚡ High Energy</option>
+            <option value="normal" selected>😊 Normal</option>
+            <option value="low">🥱 Low / Tired</option>
+            <option value="exhausted">😴 Exhausted</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- 9. Intimacy & Contraceptive Tracking -->
+      <div class="form-group">
+        <label class="form-label">Intimacy & Protection</label>
+        <div id="intimacy-chips" class="chip-grid">
+          <span class="select-chip" data-val="Protected Sex" onclick="toggleChipSelection('intimacy-chips','intimacy','Protected Sex')">🛡️ Protected</span>
+          <span class="select-chip" data-val="Unprotected Sex" onclick="toggleChipSelection('intimacy-chips','intimacy','Unprotected Sex')">⚠️ Unprotected</span>
+          <span class="select-chip" data-val="High Libido" onclick="toggleChipSelection('intimacy-chips','intimacy','High Libido')">🔥 High Libido</span>
+          <span class="select-chip" data-val="Low Libido" onclick="toggleChipSelection('intimacy-chips','intimacy','Low Libido')">❄️ Low Libido</span>
+        </div>
       </div>
 
       <!-- Personal Notes -->
@@ -728,12 +848,51 @@
         <!-- Report table dynamic -->
       </div>
 
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
         <button class="btn btn-primary" onclick="printDoctorReport()">
           🖨️ Print / Save PDF
         </button>
         <button class="btn btn-secondary" onclick="downloadCsvReport()">
           📥 Export CSV
+        </button>
+      </div>
+      <button class="btn btn-secondary" style="color:#059669; border-color:#10b981;" onclick="shareDoctorWhatsApp()">
+        💬 Share Summary via WhatsApp / Message
+      </button>
+    </div>
+  </div>
+
+  <!-- ================= MODAL 6: PARTNER MODE SHARE ================= -->
+  <div id="partner-share-modal" class="modal-overlay">
+    <div class="modal-sheet">
+      <div class="modal-drag-handle"></div>
+      <div class="modal-header">
+        <h2 class="modal-title">💕 LunaCare Partner View</h2>
+        <button class="modal-close-btn" onclick="closePartnerShareModal()">×</button>
+      </div>
+      <p style="font-size:0.83rem; color:var(--text-muted); margin-bottom:14px;">
+        Share helpful cycle phase insight with your partner so they know how to support you, without revealing private medical notes.
+      </p>
+
+      <div style="background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-md); padding:16px; margin-bottom:16px;">
+        <div style="font-size:0.75rem; font-weight:800; color:var(--primary); text-transform:uppercase;">Current Phase Summary</div>
+        <h3 id="partner-phase-title" style="font-size:1.15rem; font-weight:800; margin:4px 0;">Menstrual Phase (Day 2)</h3>
+        <p id="partner-tips-desc" style="font-size:0.84rem; color:var(--text-main); margin-bottom:10px;">
+          Experiencing cramps & lower energy. Extra care, warm tea, heating pads, and emotional warmth appreciated!
+        </p>
+        <div id="partner-action-chips" style="display:flex; flex-wrap:wrap; gap:6px; font-size:0.78rem;">
+          <span style="background:var(--primary-light); color:var(--primary); padding:3px 10px; border-radius:12px; font-weight:700;">🍫 Bring Dark Chocolate</span>
+          <span style="background:var(--secondary-light); color:var(--secondary); padding:3px 10px; border-radius:12px; font-weight:700;">☕ Warm Beverage</span>
+          <span style="background:var(--bg-subtle); color:var(--text-main); padding:3px 10px; border-radius:12px; font-weight:700;">🛋️ Rest & Relaxation</span>
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <button class="btn btn-primary" onclick="copyPartnerUpdate()">
+          📋 Copy Text
+        </button>
+        <button class="btn btn-secondary" style="color:#059669; border-color:#10b981;" onclick="sharePartnerWhatsApp()">
+          💬 Send on WhatsApp
         </button>
       </div>
     </div>
