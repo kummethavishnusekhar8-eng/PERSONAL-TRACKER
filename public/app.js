@@ -106,17 +106,21 @@ let firebaseSyncActive = false;
 
 // Sync local cache with Firebase Firestore document
 async function pushToFirebaseCloud() {
-  if (!window.LunaFirebase || !state.user || !state.user.id) return;
+  if (!state.user || !state.user.id) return;
   try {
     const db = getClientDb();
-    await window.LunaFirebase.setUserDoc(state.user.id, {
-      cycles: db.cycles,
-      logs: db.logs,
-      profile: db.profile,
+    const docData = {
+      cycles: db.cycles || [],
+      logs: db.logs || {},
+      profile: db.profile || {},
       updatedAt: new Date().toISOString()
-    });
+    };
+
+    if (window.LunaFirebase) {
+      await window.LunaFirebase.setUserDoc(state.user.id, docData);
+    }
   } catch (err) {
-    console.warn('Firebase cloud sync note:', err.message);
+    console.warn('Firebase cloud push note:', err.message);
   }
 }
 
@@ -128,28 +132,112 @@ function initFirebaseRealtimeListener() {
         const cloudData = snapshot.data();
         const localDb = getClientDb();
 
-        // Update local database from cloud
-        if (cloudData.cycles) localDb.cycles = cloudData.cycles;
-        if (cloudData.logs) localDb.logs = cloudData.logs;
-        if (cloudData.profile) localDb.profile = cloudData.profile;
-        saveClientDb(localDb);
+        let updated = false;
+        if (cloudData.cycles) { localDb.cycles = cloudData.cycles; updated = true; }
+        if (cloudData.logs) { localDb.logs = cloudData.logs; updated = true; }
+        if (cloudData.profile) { localDb.profile = { ...(localDb.profile || {}), ...cloudData.profile }; updated = true; }
 
-        // Update live app state
-        state.cycles = localDb.cycles || [];
-        state.logs = localDb.logs || {};
-        state.profile = localDb.profile || {};
-        state.stats = computeClientStats(localDb);
+        if (updated) {
+          saveClientDb(localDb);
+          state.cycles = localDb.cycles || [];
+          state.logs = localDb.logs || {};
+          state.profile = localDb.profile || {};
+          state.stats = computeClientStats(localDb);
 
-        // Re-render current view smoothly
-        renderHome();
-        if (state.currentTab === 'calendar') renderCalendar();
-        if (state.currentTab === 'analytics') renderAnalytics();
+          renderHome();
+          renderProfileDetails();
+          if (state.currentTab === 'calendar') renderCalendar();
+          if (state.currentTab === 'analytics') renderAnalytics();
+        }
       }
     });
     firebaseSyncActive = true;
   } catch (err) {
     console.warn('Firebase real-time listen setup:', err);
   }
+}
+
+// Handle Forgot Password
+async function handleForgotPassword(e) {
+  if (e) e.preventDefault();
+  haptic(25);
+  const emailInput = document.getElementById('auth-username').value.trim();
+  const email = prompt('Enter your account Email Address to receive a password reset link:', emailInput || '');
+  if (!email) return;
+
+  const cleanEmail = email.trim().toLowerCase();
+  try {
+    if (window.LunaFirebase && window.LunaFirebase.resetPassword) {
+      await window.LunaFirebase.resetPassword(cleanEmail);
+      alert(`✅ Password reset link sent to: ${cleanEmail}\n\nPlease check your inbox (and spam folder) to set a new password.`);
+    } else {
+      showToast(`Password reset instruction sent to ${cleanEmail}`);
+    }
+  } catch (err) {
+    alert('Password reset note: ' + (err.message || 'Check email address and try again.'));
+  }
+}
+
+// Render and Save Profile Details (Name, Weight, Height, Blood Group, Age)
+function renderProfileDetails() {
+  const profile = state.profile || {};
+  const user = state.user || {};
+
+  const nameInput = document.getElementById('profile-input-name');
+  const weightInput = document.getElementById('profile-input-weight');
+  const heightInput = document.getElementById('profile-input-height');
+  const bloodInput = document.getElementById('profile-input-blood');
+  const ageInput = document.getElementById('profile-input-age');
+  const nameHeader = document.getElementById('profile-user-name');
+  const subHeader = document.getElementById('profile-user-sub');
+
+  if (nameInput) nameInput.value = profile.name || user.name || '';
+  if (weightInput) weightInput.value = profile.weight || '';
+  if (heightInput) heightInput.value = profile.height || '';
+  if (bloodInput) bloodInput.value = profile.bloodGroup || '';
+  if (ageInput) ageInput.value = profile.age || '';
+
+  if (nameHeader) {
+    nameHeader.textContent = profile.name || user.name || 'My LunaCare Profile';
+  }
+  if (subHeader) {
+    const details = [];
+    if (profile.bloodGroup) details.push(`Blood: ${profile.bloodGroup}`);
+    if (profile.weight) details.push(`${profile.weight} kg`);
+    if (profile.height) details.push(`${profile.height} cm`);
+    subHeader.textContent = details.length > 0 ? details.join(' • ') : (user.username || 'Private Health Data');
+  }
+}
+
+async function saveProfileDetails(e) {
+  if (e) e.preventDefault();
+  haptic(35);
+
+  const name = document.getElementById('profile-input-name').value.trim();
+  const weight = document.getElementById('profile-input-weight').value;
+  const height = document.getElementById('profile-input-height').value;
+  const bloodGroup = document.getElementById('profile-input-blood').value;
+  const age = document.getElementById('profile-input-age').value;
+
+  if (!state.profile) state.profile = {};
+  state.profile.name = name;
+  state.profile.weight = weight ? Number(weight) : null;
+  state.profile.height = height ? Number(height) : null;
+  state.profile.bloodGroup = bloodGroup || null;
+  state.profile.age = age ? Number(age) : null;
+
+  if (state.user) {
+    state.user.name = name || state.user.name;
+    localStorage.setItem('lunacare_user', JSON.stringify(state.user));
+  }
+
+  const db = getClientDb();
+  db.profile = { ...(db.profile || {}), ...state.profile };
+  saveClientDb(db);
+
+  await pushToFirebaseCloud();
+  renderProfileDetails();
+  showToast('💾 Profile & Biometrics saved and synced!');
 }
 
 async function handleClientStorageFallback(path, options = {}) {
@@ -168,6 +256,7 @@ async function handleClientStorageFallback(path, options = {}) {
     const password = body.password || 'password123';
     const name = body.name || email.split('@')[0];
 
+    // Canonical User ID derived from email to guarantee identical ID on all phones
     let userId = 'u_' + email.replace(/[^a-zA-Z0-9]/g, '_');
     let user = { id: userId, username: email, name, pin: null };
 
@@ -195,7 +284,7 @@ async function handleClientStorageFallback(path, options = {}) {
           user = { id: userId, username: email, name, pin: null };
         }
 
-        // Pull latest user data from cloud
+        // Always pull latest cloud data on login so second phone instantly gets everything
         const docSnap = await window.LunaFirebase.getUserDoc(userId);
         if (docSnap.exists()) {
           const cloudData = docSnap.data();
@@ -203,6 +292,13 @@ async function handleClientStorageFallback(path, options = {}) {
           if (cloudData.logs) db.logs = cloudData.logs;
           if (cloudData.profile) db.profile = cloudData.profile;
           saveClientDb(db);
+        } else {
+          // If first time cloud init, push local initial seed to cloud
+          await window.LunaFirebase.setUserDoc(userId, {
+            cycles: db.cycles,
+            logs: db.logs,
+            profile: db.profile
+          });
         }
       } catch (fbErr) {
         console.warn('Firebase auth note:', fbErr.message);
@@ -222,6 +318,7 @@ async function handleClientStorageFallback(path, options = {}) {
     const hasPin = Boolean(db.profile && db.profile.quickPin);
     state.user = user;
     state.token = token;
+    state.profile = db.profile;
     initFirebaseRealtimeListener();
 
     return { token, user, hasPin, message: 'Success' };
@@ -313,6 +410,13 @@ async function handleClientStorageFallback(path, options = {}) {
     saveClientDb(db);
     pushToFirebaseCloud();
     return { success: true };
+  }
+
+  if (path === '/api/profile' && method === 'PUT') {
+    db.profile = { ...(db.profile || {}), ...body };
+    saveClientDb(db);
+    pushToFirebaseCloud();
+    return { success: true, profile: db.profile };
   }
 
   return { success: true };
@@ -445,6 +549,7 @@ function switchTab(tabId) {
   if (tabId === 'calendar') renderCalendar();
   if (tabId === 'analytics') renderAnalytics();
   if (tabId === 'home') renderHome();
+  if (tabId === 'profile') renderProfileDetails();
 }
 
 // ================= Auth Handlers =================

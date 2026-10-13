@@ -109,9 +109,12 @@
           </button>
         </form>
 
-        <div style="text-align:center; margin-top:16px;">
-          <a href="#" id="toggle-auth-mode" style="font-size:0.82rem; color:var(--primary); font-weight:700; text-decoration:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:16px; font-size:0.82rem;">
+          <a href="#" id="toggle-auth-mode" style="color:var(--primary); font-weight:700; text-decoration:none;">
             Don't have an account? Create Free Account
+          </a>
+          <a href="#" id="forgot-password-link" onclick="handleForgotPassword(event)" style="color:var(--text-muted); font-weight:600; text-decoration:none;">
+            Forgot Password?
           </a>
         </div>
       </div>
@@ -266,6 +269,57 @@
           <img src="/icon.svg" style="width:68px; height:68px; margin:0 auto 10px;" alt="Profile Avatar">
           <h2 id="profile-user-name" style="font-size:1.3rem; font-weight:800;">My LunaCare Profile</h2>
           <p id="profile-user-sub" style="color:var(--text-muted); font-size:0.85rem;">Private Health Data</p>
+        </div>
+
+        <!-- Personal Health & Biometrics Details Card -->
+        <div class="card">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+            <h3 style="font-size:1.05rem; font-weight:800;">👤 Personal Health Biometrics</h3>
+            <span class="pill-sm" style="background:var(--primary-light); color:var(--primary);">Synced</span>
+          </div>
+
+          <form id="profile-details-form" onsubmit="saveProfileDetails(event)">
+            <div class="form-group">
+              <label class="form-label">Full Name</label>
+              <input type="text" id="profile-input-name" class="input-text" placeholder="e.g. Maya Sharma">
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;">
+              <div class="form-group" style="margin-bottom:0;">
+                <label class="form-label">Weight (kg)</label>
+                <input type="number" step="0.5" id="profile-input-weight" class="input-text" placeholder="e.g. 58">
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label class="form-label">Height (cm)</label>
+                <input type="number" id="profile-input-height" class="input-text" placeholder="e.g. 165">
+              </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px;">
+              <div class="form-group" style="margin-bottom:0;">
+                <label class="form-label">Blood Group</label>
+                <select id="profile-input-blood" class="input-select">
+                  <option value="">Not set</option>
+                  <option value="A+">A+</option>
+                  <option value="A-">A-</option>
+                  <option value="B+">B+</option>
+                  <option value="B-">B-</option>
+                  <option value="O+">O+</option>
+                  <option value="O-">O-</option>
+                  <option value="AB+">AB+</option>
+                  <option value="AB-">AB-</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label class="form-label">Age / DOB</label>
+                <input type="number" id="profile-input-age" class="input-text" placeholder="e.g. 24">
+              </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="padding:10px;">
+              💾 Save Profile & Biometrics
+            </button>
+          </form>
         </div>
 
         <div class="card">
@@ -693,7 +747,7 @@
   <!-- Google Firebase Real-time Multi-Device Cloud Sync SDK -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
     import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -718,6 +772,7 @@
       db: fbDb,
       signIn: (email, pass) => signInWithEmailAndPassword(fbAuth, email, pass),
       signUp: (email, pass) => createUserWithEmailAndPassword(fbAuth, email, pass),
+      resetPassword: (email) => sendPasswordResetEmail(fbAuth, email),
       signOut: () => signOut(fbAuth),
       onAuth: (cb) => onAuthStateChanged(fbAuth, cb),
       getUserDoc: (uid) => getDoc(doc(fbDb, "users", uid)),
