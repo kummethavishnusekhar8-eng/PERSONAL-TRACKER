@@ -466,9 +466,14 @@
           <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:12px;">
             Private health data. Zero cloud fees or subscription requirements.
           </p>
-          <button class="btn btn-outline-danger" onclick="logout()">
-            Sign Out
-          </button>
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <button class="btn btn-secondary" style="color:#e11d48; border-color:#fecdd3;" onclick="confirmClearAllCycles()">
+              🗑️ Clear All Cycle History (Reset)
+            </button>
+            <button class="btn btn-outline-danger" onclick="logout()">
+              Sign Out
+            </button>
+          </div>
         </div>
       </section>
 

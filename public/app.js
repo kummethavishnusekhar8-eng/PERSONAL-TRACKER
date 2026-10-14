@@ -78,9 +78,19 @@ async function api(path, options = {}) {
   }
 }
 
-// Client Storage Engine for 100% Free Netlify Static Deployment
-function getClientDb() {
+// Client Storage Engine for 100% Free Netlify Static Deployment (Scoped per Account)
+function getUserStorageKey(specificUser = null) {
+  const username = specificUser || state.user?.username;
+  if (!username) return 'lunacare_offline_db_guest';
+  const clean = String(username).trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
+  return `lunacare_user_db_${clean}`;
+}
+
+function getClientDb(specificUser = null) {
+  const user = specificUser || state.user?.username || null;
+  const key = getUserStorageKey(user);
   const defaultDb = {
+    username: user,
     users: [],
     cycles: [],
     logs: {},
@@ -90,29 +100,50 @@ function getClientDb() {
       avgPeriodDuration: 5
     }
   };
-  const stored = localStorage.getItem('lunacare_offline_db');
+
+  // Clean up legacy shared storage if old demo records existed
+  try {
+    const legacy = localStorage.getItem('lunacare_offline_db');
+    if (legacy) {
+      const parsedLegacy = JSON.parse(legacy);
+      if (parsedLegacy && Array.isArray(parsedLegacy.cycles)) {
+        if (parsedLegacy.cycles.some(c => c.id === 'c_1' || c.id === 'c_2' || c.startDate === '2026-09-12')) {
+          localStorage.removeItem('lunacare_offline_db');
+        }
+      }
+    }
+  } catch {}
+
+  const stored = localStorage.getItem(key);
   if (!stored) {
-    localStorage.setItem('lunacare_offline_db', JSON.stringify(defaultDb));
+    localStorage.setItem(key, JSON.stringify(defaultDb));
     return defaultDb;
   }
   try {
-    return JSON.parse(stored);
+    const parsed = JSON.parse(stored);
+    if (!Array.isArray(parsed.cycles)) parsed.cycles = [];
+    // Filter out any demo cycles (c_1, c_2, 2026-09-12)
+    parsed.cycles = parsed.cycles.filter(c => c.id !== 'c_1' && c.id !== 'c_2' && c.startDate !== '2026-09-12');
+    if (!parsed.logs || typeof parsed.logs !== 'object') parsed.logs = {};
+    if (!parsed.profile) parsed.profile = { quickPin: null, avgCycleLength: 28, avgPeriodDuration: 5 };
+    return parsed;
   } catch {
     return defaultDb;
   }
 }
 
-function saveClientDb(db) {
-  localStorage.setItem('lunacare_offline_db', JSON.stringify(db));
+function saveClientDb(db, specificUser = null) {
+  const key = getUserStorageKey(specificUser || db.username);
+  localStorage.setItem(key, JSON.stringify(db));
 }
 
 // Universal Cloud & Multi-Device Sync Engine (Direct Network Sync)
 async function pushToCloudSync() {
   if (!state.user || !state.user.username) return;
   try {
-    const db = getClientDb();
+    const db = getClientDb(state.user.username);
     const payload = {
-      cycles: db.cycles || [],
+      cycles: (db.cycles || []).filter(c => c.id !== 'c_1' && c.id !== 'c_2' && c.startDate !== '2026-09-12'),
       logs: db.logs || {},
       profile: db.profile || {},
       updatedAt: new Date().toISOString()
@@ -133,11 +164,13 @@ async function pullFromCloudSync() {
     if (!window.LunaCloudSync) return false;
     const cloudData = await window.LunaCloudSync.loadUserData(state.user.username);
     if (cloudData && (cloudData.cycles || cloudData.logs || cloudData.profile)) {
-      const db = getClientDb();
-      if (cloudData.cycles) db.cycles = cloudData.cycles;
+      const db = getClientDb(state.user.username);
+      if (cloudData.cycles) {
+        db.cycles = cloudData.cycles.filter(c => c.id !== 'c_1' && c.id !== 'c_2' && c.startDate !== '2026-09-12');
+      }
       if (cloudData.logs) db.logs = cloudData.logs;
       if (cloudData.profile) db.profile = { ...(db.profile || {}), ...cloudData.profile };
-      saveClientDb(db);
+      saveClientDb(db, state.user.username);
 
       state.cycles = db.cycles || [];
       state.logs = db.logs || {};
@@ -366,48 +399,55 @@ async function handleClientStorageFallback(path, options = {}) {
 
     let user = { id: userId, username: email, name, pin: null, password };
 
+    // Load account-specific database for this email
+    let userDb = getClientDb(email);
+
     // Check Cloud for existing account data
     let hadCloudData = false;
     if (window.LunaCloudSync) {
       const cloudData = await window.LunaCloudSync.loadUserData(email);
-      if (cloudData) {
+      if (cloudData && ((cloudData.cycles && cloudData.cycles.length > 0) || (cloudData.logs && Object.keys(cloudData.logs).length > 0) || cloudData.profile)) {
         hadCloudData = true;
-        db.cycles = cloudData.cycles || [];
-        db.logs = cloudData.logs || {};
-        db.profile = cloudData.profile || {};
-        saveClientDb(db);
+        userDb.cycles = (cloudData.cycles || []).filter(c => c.id !== 'c_1' && c.id !== 'c_2' && c.startDate !== '2026-09-12');
+        userDb.logs = cloudData.logs || {};
+        userDb.profile = { ...(userDb.profile || {}), ...(cloudData.profile || {}) };
+        saveClientDb(userDb, email);
       }
     }
 
-    // If new user and no cloud data existed, ensure 100% fresh clean state (0 demo cycles)
-    if (!hadCloudData && path === '/api/auth/register') {
-      db.cycles = [];
-      db.logs = {};
-      db.profile = {
+    // If new account or no cloud data existed, guarantee 100% clean state (0 cycles, 0 demo logs)
+    if (!hadCloudData) {
+      userDb.cycles = [];
+      userDb.logs = {};
+      userDb.profile = {
         name,
         quickPin: null,
         avgCycleLength: 28,
         avgPeriodDuration: 5
       };
-      saveClientDb(db);
+      saveClientDb(userDb, email);
     }
 
     const token = 'token_' + userId;
-    let existing = db.users.find(u => u.username === email);
+    let existing = (userDb.users || []).find(u => u.username === email);
     if (!existing) {
-      db.users.push(user);
+      userDb.users = [user];
     } else {
       user = existing;
     }
-    saveClientDb(db);
+    saveClientDb(userDb, email);
 
-    const hasPin = Boolean(db.profile && db.profile.quickPin);
     state.user = user;
     state.token = token;
-    state.profile = db.profile;
+    state.profile = userDb.profile;
+    state.cycles = userDb.cycles || [];
+    state.logs = userDb.logs || {};
+    state.stats = computeClientStats(userDb);
 
-    // Push initial sync
-    pushToCloudSync();
+    const hasPin = Boolean(userDb.profile && userDb.profile.quickPin);
+
+    // Sync state
+    await pushToCloudSync();
 
     return { token, user, hasPin, message: 'Success' };
   }
@@ -734,8 +774,13 @@ function hideAuthView() {
 function logout() {
   state.token = null;
   state.user = null;
+  state.cycles = [];
+  state.logs = {};
+  state.stats = null;
+  state.profile = null;
   localStorage.removeItem('lunacare_token');
   localStorage.removeItem('lunacare_user');
+  localStorage.removeItem('lunacare_cloud_mirror');
   hidePinScreen();
   showAuthView();
   showToast('Logged out. Please sign in with username/password.');
@@ -1602,7 +1647,9 @@ async function submitStartCycle() {
       body: JSON.stringify({ startDate, startTime, endDate: endDate || null, notes })
     });
 
-    state.cycles.push(res.cycle);
+    if (res.cycle && !state.cycles.some(c => c.id === res.cycle.id)) {
+      state.cycles.push(res.cycle);
+    }
     state.stats = res.stats;
 
     // Automatically create day 1 log with medium flow if not logged
@@ -1837,9 +1884,12 @@ function renderAnalytics() {
     </div>
 
     <div class="card">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; gap:8px; flex-wrap:wrap;">
         <h3 style="font-size:1.05rem; font-weight:800;">Cycle History & Intervals</h3>
-        <button class="btn btn-secondary" style="width:auto; padding:6px 14px; font-size:0.8rem;" onclick="openStartCycleModal()">+ Add Cycle</button>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-secondary" style="width:auto; padding:6px 12px; font-size:0.8rem; color:#e11d48; border-color:#fecdd3;" onclick="confirmClearAllCycles()">🗑️ Clear All</button>
+          <button class="btn btn-secondary" style="width:auto; padding:6px 14px; font-size:0.8rem;" onclick="openStartCycleModal()">+ Add Cycle</button>
+        </div>
       </div>
       <div class="cycle-history-list">
         ${cycleListHtml || '<p style="color:var(--text-muted); font-size:0.85rem; text-align:center;">No past cycles yet.</p>'}
@@ -1905,6 +1955,25 @@ async function deleteCycle(cycleId) {
   } catch (err) {
     showToast('Failed to delete cycle');
   }
+}
+
+async function confirmClearAllCycles() {
+  haptic(35);
+  const confirmed = confirm('Are you sure you want to clear all cycle history? This will delete all cycles and reset your cycle history to a clean state.');
+  if (!confirmed) return;
+
+  const db = getClientDb();
+  db.cycles = [];
+  saveClientDb(db);
+
+  state.cycles = [];
+  state.stats = computeClientStats(db);
+
+  await pushToCloudSync();
+  renderHome();
+  renderAnalytics();
+  if (state.currentTab === 'calendar') renderCalendar();
+  showToast('🗑️ All cycle records cleared successfully');
 }
 
 // ================= Phone Connect QR Modal =================
