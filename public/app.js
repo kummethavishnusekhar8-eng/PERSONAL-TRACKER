@@ -18,27 +18,27 @@ const state = {
   activeLogForm: {
     date: new Date().toISOString().split('T')[0],
     time: new Date().toTimeString().slice(0, 5),
-    flow: 'medium',
-    padsUsed: 2,
-    painLevel: 3,
-    painAreas: ['Abdominal Cramps'],
-    remedies: ['Heating Pad'],
-    moods: ['Calm'],
+    flow: 'none',
+    padsUsed: 0,
+    painLevel: 0,
+    painAreas: [],
+    remedies: [],
+    moods: [],
     moodSwingIntensity: 'mild',
     pmsSymptoms: [],
     meals: {
-      breakfast: true,
-      lunch: true,
-      dinner: true,
-      waterGlasses: 6,
-      waterLitres: 1.5,
+      breakfast: false,
+      lunch: false,
+      dinner: false,
+      waterGlasses: 0,
+      waterLitres: 0,
       appetite: 'normal',
       cravingsNote: ''
     },
-    medications: ['Iron Supplement'],
+    medications: [],
     bbt: '',
     cervicalFluid: 'none',
-    sleepHours: 7.5,
+    sleepHours: null,
     energyLevel: 'normal',
     intimacy: [],
     notes: ''
@@ -122,9 +122,21 @@ function getClientDb(specificUser = null) {
   try {
     const parsed = JSON.parse(stored);
     if (!Array.isArray(parsed.cycles)) parsed.cycles = [];
-    // Filter out any demo cycles (c_1, c_2, 2026-09-12)
-    parsed.cycles = parsed.cycles.filter(c => c.id !== 'c_1' && c.id !== 'c_2' && c.startDate !== '2026-09-12');
+    // Filter out any demo cycles
+    parsed.cycles = parsed.cycles.filter(c => {
+      if (!c) return false;
+      if (c.id === 'c_1' || c.id === 'c_2' || c.startDate === '2026-09-12') return false;
+      if (c.notes === 'Demo Cycle 1' || c.notes === 'Demo Cycle 2' || c.notes === 'Previous cycle' || c.notes === 'Current period') return false;
+      return true;
+    });
     if (!parsed.logs || typeof parsed.logs !== 'object') parsed.logs = {};
+    // Filter out any auto-generated fake logs
+    Object.keys(parsed.logs).forEach(date => {
+      const log = parsed.logs[date];
+      if (log && (log.notes === 'Period started' || log.notes === 'Cycle start day automatic entry')) {
+        delete parsed.logs[date];
+      }
+    });
     if (!parsed.profile) parsed.profile = { quickPin: null, avgCycleLength: 28, avgPeriodDuration: 5 };
     return parsed;
   } catch {
@@ -166,9 +178,22 @@ async function pullFromCloudSync() {
     if (cloudData && (cloudData.cycles || cloudData.logs || cloudData.profile)) {
       const db = getClientDb(state.user.username);
       if (cloudData.cycles) {
-        db.cycles = cloudData.cycles.filter(c => c.id !== 'c_1' && c.id !== 'c_2' && c.startDate !== '2026-09-12');
+        db.cycles = cloudData.cycles.filter(c => {
+          if (!c) return false;
+          if (c.id === 'c_1' || c.id === 'c_2' || c.startDate === '2026-09-12') return false;
+          if (c.notes === 'Demo Cycle 1' || c.notes === 'Demo Cycle 2' || c.notes === 'Previous cycle' || c.notes === 'Current period') return false;
+          return true;
+        });
       }
-      if (cloudData.logs) db.logs = cloudData.logs;
+      if (cloudData.logs) {
+        db.logs = cloudData.logs;
+        Object.keys(db.logs).forEach(date => {
+          const log = db.logs[date];
+          if (log && (log.notes === 'Period started' || log.notes === 'Cycle start day automatic entry')) {
+            delete db.logs[date];
+          }
+        });
+      }
       if (cloudData.profile) db.profile = { ...(db.profile || {}), ...cloudData.profile };
       saveClientDb(db, state.user.username);
 
@@ -674,12 +699,12 @@ function computeClientStats(db) {
     fertileWindow: { start: fertileStart, end: fertileEnd, ovulationDate },
     irregularity: { isIrregular: pcosScore > 40, reason: pcosDesc, talkingPoints: [] },
     pcos: { score: pcosScore, title: pcosTitle, desc: pcosDesc, badge: pcosBadge, color: pcosColor },
-    pillStreak: Math.max(1, pillStreak),
+    pillStreak: pillStreak,
     pads: { total: totalPads, avgPerDay: Math.round(totalPads / Math.max(1, Object.keys(logs).length)) },
     pain: { avgLevel: painCount > 0 ? (painSum / painCount).toFixed(1) : 0, totalEntries: painCount },
     moodCounts,
     nutrition: {
-      regularityPercentage: mealsTracked > 0 ? Math.round((fullMealsEaten / mealsTracked) * 100) : 100,
+      regularityPercentage: mealsTracked > 0 ? Math.round((fullMealsEaten / mealsTracked) * 100) : 0,
       fullMealsEaten,
       mealsTracked
     }
@@ -949,11 +974,13 @@ function renderHome() {
     dayNumberEl.textContent = '--';
     dayLabelEl.textContent = 'No Period Logged Yet';
     phaseTagEl.textContent = 'Tap to Start Cycle';
+    phaseTagEl.style.background = 'var(--bg-subtle)';
+    phaseTagEl.style.color = 'var(--text-muted)';
   }
 
   // Update Progress Ring (circumference: 2 * PI * 92 = ~578)
   const circumference = 2 * Math.PI * 92;
-  const pct = Math.min(1, Math.max(0, currCycleDay / avgGap));
+  const pct = stats.latestCycle ? Math.min(1, Math.max(0, currCycleDay / avgGap)) : 0;
   const offset = circumference - (pct * circumference);
   if (ringProgressEl) {
     ringProgressEl.style.strokeDasharray = `${circumference}`;
@@ -962,12 +989,12 @@ function renderHome() {
 
   // Meta Cards
   const gapValEl = document.getElementById('meta-day-gap');
-  gapValEl.textContent = `${avgGap} Days`;
+  gapValEl.textContent = stats.latestCycle ? `${avgGap} Days` : '--';
 
   const nextCountEl = document.getElementById('meta-next-period');
   const nextDateEl = document.getElementById('meta-next-date');
 
-  if (stats.daysUntilNextPeriod !== null && stats.daysUntilNextPeriod !== undefined) {
+  if (stats.latestCycle && stats.daysUntilNextPeriod !== null && stats.daysUntilNextPeriod !== undefined) {
     if (stats.daysUntilNextPeriod > 0) {
       nextCountEl.textContent = `In ${stats.daysUntilNextPeriod} Days`;
     } else if (stats.daysUntilNextPeriod === 0) {
@@ -981,11 +1008,12 @@ function renderHome() {
 
   // Display predicted exact calendar date
   if (nextDateEl) {
-    if (stats.nextPredictedStart) {
-      const pDate = new Date(stats.nextPredictedStart + 'T00:00:00');
+    if (stats.latestCycle && stats.nextPredictedStart) {
+      const pDate = new Date(stats.latestCycle.startDate + 'T00:00:00');
+      pDate.setDate(pDate.getDate() + avgGap);
       nextDateEl.textContent = 'Est: ' + pDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
     } else {
-      nextDateEl.textContent = 'Next cycle date';
+      nextDateEl.textContent = '--';
     }
   }
 
@@ -1062,8 +1090,12 @@ function renderHome() {
   // Render Pill Reminder & Streak Checklist
   const streakCountEl = document.getElementById('pill-streak-count');
   const pillChecklistEl = document.getElementById('pill-checklist-items');
-  if (streakCountEl && stats.pillStreak) {
-    streakCountEl.textContent = `${stats.pillStreak}-Day Streak 🔥`;
+  if (streakCountEl) {
+    if (stats.pillStreak > 0) {
+      streakCountEl.textContent = `${stats.pillStreak}-Day Streak 🔥`;
+    } else {
+      streakCountEl.textContent = '0 Days';
+    }
   }
   if (pillChecklistEl) {
     const defaultMeds = ['Birth Control Pill', 'Iron Supplement', 'Multivitamin'];
@@ -1360,26 +1392,28 @@ function openLogModal(dateStr = null) {
     state.activeLogForm = {
       date: targetDate,
       time: new Date().toTimeString().slice(0, 5),
-      flow: 'medium',
-      padsUsed: 2,
-      painLevel: 2,
-      painAreas: ['Abdominal Cramps'],
-      remedies: ['Heating Pad'],
-      moods: ['Calm'],
+      flow: 'none',
+      padsUsed: 0,
+      painLevel: 0,
+      painAreas: [],
+      remedies: [],
+      moods: [],
       moodSwingIntensity: 'mild',
       pmsSymptoms: [],
       meals: {
-        breakfast: true,
-        lunch: true,
-        dinner: true,
-        waterGlasses: 6,
-        waterLitres: 1.5,
+        breakfast: false,
+        lunch: false,
+        dinner: false,
+        waterGlasses: 0,
+        waterLitres: 0,
         appetite: 'normal',
         cravingsNote: ''
       },
-      medications: ['Iron Supplement'],
+      medications: [],
       bbt: '',
       cervicalFluid: 'none',
+      sleepHours: null,
+      energyLevel: 'normal',
       notes: ''
     };
   }
@@ -1651,28 +1685,6 @@ async function submitStartCycle() {
       state.cycles.push(res.cycle);
     }
     state.stats = res.stats;
-
-    // Automatically create day 1 log with medium flow if not logged
-    if (!state.logs[startDate]) {
-      await api('/api/logs', {
-        method: 'POST',
-        body: JSON.stringify({
-          date: startDate,
-          time: startTime,
-          flow: 'medium',
-          padsUsed: 2,
-          painLevel: 3,
-          painAreas: ['Abdominal Cramps'],
-          remedies: ['Heating Pad'],
-          moods: ['Sensitive'],
-          moodSwingIntensity: 'mild',
-          meals: { breakfast: true, lunch: true, dinner: true, waterGlasses: 6, waterLitres: 1.5, appetite: 'normal' },
-          notes: 'Period started'
-        })
-      });
-      const updatedLogs = await api('/api/logs');
-      state.logs = updatedLogs.logs;
-    }
 
     closeStartCycleModal();
     showToast(`🌸 Period recorded! Day Gap: ${res.cycle.dayGap ? res.cycle.dayGap + ' Days' : 'Initial Cycle'}`);
@@ -1974,6 +1986,29 @@ async function confirmClearAllCycles() {
   renderAnalytics();
   if (state.currentTab === 'calendar') renderCalendar();
   showToast('🗑️ All cycle records cleared successfully');
+}
+
+async function confirmResetAllData() {
+  haptic(40);
+  const confirmed = confirm('⚠️ Reset all account data?\nThis will completely delete all cycle records and symptom logs for this account, leaving a 100% clean slate.');
+  if (!confirmed) return;
+
+  const db = getClientDb();
+  db.cycles = [];
+  db.logs = {};
+  saveClientDb(db);
+
+  state.cycles = [];
+  state.logs = {};
+  state.stats = computeClientStats(db);
+  localStorage.removeItem('lunacare_cloud_mirror');
+
+  await pushToCloudSync();
+  renderHome();
+  renderAnalytics();
+  renderProfileDetails();
+  if (state.currentTab === 'calendar') renderCalendar();
+  showToast('🌸 All cycles & logs wiped! Account is now 100% clean.');
 }
 
 // ================= Phone Connect QR Modal =================
