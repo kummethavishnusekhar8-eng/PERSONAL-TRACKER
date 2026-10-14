@@ -986,11 +986,9 @@ function renderHome() {
     }
 
     if (ctaActionsEl) {
+      ctaActionsEl.style.display = 'block';
       ctaActionsEl.innerHTML = `
-        <button class="btn btn-primary" onclick="openLogModal()">
-          🌸 + Log Today's Flow & Symptoms
-        </button>
-        <button class="btn btn-secondary" onclick="openStartCycleModal()" style="font-size:0.86rem; padding:9px 14px;">
+        <button class="btn btn-secondary" onclick="openStartCycleModal()" style="font-size:0.86rem; padding:9px 14px; margin-top:8px;">
           🩸 Period Started (New Cycle)
         </button>
       `;
@@ -1007,14 +1005,8 @@ function renderHome() {
     }
 
     if (ctaActionsEl) {
-      ctaActionsEl.innerHTML = `
-        <button class="btn btn-primary" onclick="openStartCycleModal()">
-          🩸 Period Started
-        </button>
-        <button class="btn btn-secondary" onclick="openLogModal()" style="font-size:0.86rem; padding:9px 14px;">
-          🌸 + Log Today's Symptoms
-        </button>
-      `;
+      ctaActionsEl.style.display = 'none';
+      ctaActionsEl.innerHTML = '';
     }
   }
 
