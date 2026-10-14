@@ -1084,32 +1084,7 @@ function renderHome() {
     pcosDescEl.textContent = stats.pcos.desc;
   }
 
-  // Render Pill Reminder & Streak Checklist
-  const streakCountEl = document.getElementById('pill-streak-count');
-  const pillChecklistEl = document.getElementById('pill-checklist-items');
-  if (streakCountEl) {
-    if (stats.pillStreak > 0) {
-      streakCountEl.textContent = `${stats.pillStreak}-Day Streak 🔥`;
-    } else {
-      streakCountEl.textContent = '0 Days';
-    }
-  }
-  if (pillChecklistEl) {
-    const defaultMeds = ['Birth Control Pill', 'Iron Supplement', 'Multivitamin'];
-    const takenMeds = todayLog?.medications || [];
-    pillChecklistEl.innerHTML = defaultMeds.map(med => {
-      const isTaken = takenMeds.includes(med);
-      return `
-        <div class="pill-item-row">
-          <div style="display:flex; align-items:center; gap:8px;">
-            <input type="checkbox" ${isTaken ? 'checked' : ''} onchange="togglePillTaken('${med}', this.checked)" style="width:18px; height:18px; accent-color:var(--primary); cursor:pointer;">
-            <span style="font-size:0.86rem; font-weight:${isTaken ? '700' : '500'}; color:${isTaken ? 'var(--text-main)' : 'var(--text-muted)'}; text-decoration:${isTaken ? 'line-through' : 'none'};">${med}</span>
-          </div>
-          <span style="font-size:0.75rem; color:${isTaken ? 'var(--success)' : 'var(--text-muted)'}; font-weight:700;">${isTaken ? '✓ Taken' : 'Pending'}</span>
-        </div>
-      `;
-    }).join('');
-  }
+
 
   // Render Irregularity Health Alert Banner
   const alertEl = document.getElementById('home-irregular-alert');
@@ -2206,33 +2181,7 @@ function switchTrackerMode(mode) {
   showToast(mode === 'ttc' ? '👶 Conception / TTC Mode Activated' : '🩸 Period Tracking Mode Activated');
 }
 
-// 2. Daily Pill Checklist Toggle
-async function togglePillTaken(medName, isChecked) {
-  haptic(25);
-  const todayStr = new Date().toISOString().split('T')[0];
-  const db = getClientDb();
-  if (!db.logs[todayStr]) {
-    db.logs[todayStr] = {
-      date: todayStr,
-      time: new Date().toTimeString().slice(0, 5),
-      medications: [],
-      updatedAt: new Date().toISOString()
-    };
-  }
-  let meds = db.logs[todayStr].medications || [];
-  if (isChecked) {
-    if (!meds.includes(medName)) meds.push(medName);
-  } else {
-    meds = meds.filter(m => m !== medName);
-  }
-  db.logs[todayStr].medications = meds;
-  saveClientDb(db);
-  state.logs = db.logs;
-  state.stats = computeClientStats(db);
-  renderHome();
-  pushToCloudSync();
-  showToast(isChecked ? `✓ Marked ${medName} as taken today!` : `Unmarked ${medName}`);
-}
+
 
 
 
