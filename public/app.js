@@ -123,12 +123,10 @@ function getClientDb(specificUser = null) {
     const parsed = JSON.parse(stored);
     if (!Array.isArray(parsed.cycles)) parsed.cycles = [];
     // Filter out any demo cycles
-    parsed.cycles = parsed.cycles.filter(c => {
-      if (!c) return false;
-      if (c.id === 'c_1' || c.id === 'c_2' || c.startDate === '2026-09-12') return false;
-      if (c.notes === 'Demo Cycle 1' || c.notes === 'Demo Cycle 2' || c.notes === 'Previous cycle' || c.notes === 'Current period') return false;
-      return true;
-    });
+    parsed.cycles = (parsed.cycles || []).map((c, idx) => ({
+      ...c,
+      id: c.id || ('c_' + (c.startDate ? c.startDate.replace(/-/g, '') : Date.now()) + '_' + idx)
+    }));
     if (!parsed.logs || typeof parsed.logs !== 'object') parsed.logs = {};
     // Filter out any auto-generated fake logs
     Object.keys(parsed.logs).forEach(date => {
@@ -183,7 +181,10 @@ async function pullFromCloudSync() {
           if (c.id === 'c_1' || c.id === 'c_2' || c.startDate === '2026-09-12') return false;
           if (c.notes === 'Demo Cycle 1' || c.notes === 'Demo Cycle 2' || c.notes === 'Previous cycle' || c.notes === 'Current period') return false;
           return true;
-        });
+        }).map((c, idx) => ({
+          ...c,
+          id: c.id || ('c_' + (c.startDate ? c.startDate.replace(/-/g, '') : Date.now()) + '_' + idx)
+        }));
       }
       if (cloudData.logs) {
         db.logs = cloudData.logs;
@@ -535,9 +536,9 @@ async function handleClientStorageFallback(path, options = {}) {
 
   if (path.startsWith('/api/cycles/') && method === 'DELETE') {
     const id = path.split('/')[3];
-    db.cycles = db.cycles.filter(item => item.id !== id);
+    db.cycles = (db.cycles || []).filter(item => item.id !== id && item.startDate !== id);
     saveClientDb(db);
-    pushToCloudSync();
+    await pushToCloudSync();
     return { success: true, stats: computeClientStats(db) };
   }
 
@@ -1959,11 +1960,12 @@ async function deleteCycle(cycleId) {
   haptic(30);
   try {
     const res = await api(`/api/cycles/${cycleId}`, { method: 'DELETE' });
-    state.cycles = state.cycles.filter(c => c.id !== cycleId);
+    state.cycles = state.cycles.filter(c => c.id !== cycleId && c.startDate !== cycleId);
     state.stats = res.stats;
     showToast('Cycle deleted');
     renderAnalytics();
     renderHome();
+    if (state.currentTab === 'calendar') renderCalendar();
   } catch (err) {
     showToast('Failed to delete cycle');
   }
