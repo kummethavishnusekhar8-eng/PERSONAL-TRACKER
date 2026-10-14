@@ -55,36 +55,7 @@
     </div>
   </div>
 
-  <!-- Stealth Calculator Mode Overlay (Disguises App as a Functional Calculator) -->
-  <div id="calculator-overlay" class="calculator-overlay">
-    <div style="font-size:0.75rem; color:#6b7280; text-align:right; margin-bottom:4px;">CALCULATOR</div>
-    <div id="calc-display" class="calc-display">0</div>
-    <div class="calc-grid">
-      <button class="calc-btn fn" onclick="handleCalcKey('C')">C</button>
-      <button class="calc-btn fn" onclick="handleCalcKey('±')">±</button>
-      <button class="calc-btn fn" onclick="handleCalcKey('%')">%</button>
-      <button class="calc-btn op" onclick="handleCalcKey('/')">÷</button>
 
-      <button class="calc-btn" onclick="handleCalcKey('7')">7</button>
-      <button class="calc-btn" onclick="handleCalcKey('8')">8</button>
-      <button class="calc-btn" onclick="handleCalcKey('9')">9</button>
-      <button class="calc-btn op" onclick="handleCalcKey('*')">×</button>
-
-      <button class="calc-btn" onclick="handleCalcKey('4')">4</button>
-      <button class="calc-btn" onclick="handleCalcKey('5')">5</button>
-      <button class="calc-btn" onclick="handleCalcKey('6')">6</button>
-      <button class="calc-btn op" onclick="handleCalcKey('-')">−</button>
-
-      <button class="calc-btn" onclick="handleCalcKey('1')">1</button>
-      <button class="calc-btn" onclick="handleCalcKey('2')">2</button>
-      <button class="calc-btn" onclick="handleCalcKey('3')">3</button>
-      <button class="calc-btn op" onclick="handleCalcKey('+')">+</button>
-
-      <button class="calc-btn zero" onclick="handleCalcKey('0')">0</button>
-      <button class="calc-btn" onclick="handleCalcKey('.')">.</button>
-      <button class="calc-btn op" onclick="handleCalcKey('=')">=</button>
-    </div>
-  </div>
 
   <div id="app-container">
 
@@ -102,10 +73,7 @@
         <button class="btn-icon" onclick="triggerSosAlert()" style="color:#ef4444;" title="Emergency SOS Cramp / Supply Alert">
           🆘
         </button>
-        <!-- Stealth Calculator Disguise Mode -->
-        <button class="btn-icon" onclick="toggleStealthCalculator()" title="Stealth Calculator Disguise">
-          🔢
-        </button>
+
         <!-- Wi-Fi / Phone QR Link Pill -->
         <button id="header-wifi-pill" class="wifi-pill" style="display:none;" onclick="openPhoneConnectModal()" title="Connect Mobile Phone">
           <span class="pulse"></span> Phone
@@ -446,9 +414,7 @@
             <button class="btn btn-secondary" onclick="toggleQuickPin()">
               🔒 Set / Change 4-Digit Quick PIN Lock
             </button>
-            <button class="btn btn-secondary" onclick="toggleStealthCalculator()">
-              🔢 Test Stealth Calculator Disguise
-            </button>
+
             <button class="btn btn-secondary" onclick="openPartnerShareModal()">
               💕 LunaCare Partner Mode (Phase Sharing)
             </button>

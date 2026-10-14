@@ -46,11 +46,7 @@ const state = {
   pinEntered: '',
   hasPin: false,
   networkUrls: [],
-  trackerMode: localStorage.getItem('lunacare_mode') || 'period', // 'period' or 'ttc'
-  calcInput: '0',
-  calcPrev: null,
-  calcOp: null,
-  calcClearOnNext: false
+  trackerMode: localStorage.getItem('lunacare_mode') || 'period' // 'period' or 'ttc'
 };
 
 // API Helper with full Netlify / Serverless Offline LocalStorage fallback
@@ -2238,86 +2234,7 @@ async function togglePillTaken(medName, isChecked) {
   showToast(isChecked ? `✓ Marked ${medName} as taken today!` : `Unmarked ${medName}`);
 }
 
-// 3. Stealth Calculator Disguise
-function toggleStealthCalculator() {
-  haptic(30);
-  const overlay = document.getElementById('calculator-overlay');
-  if (!overlay) return;
-  overlay.classList.toggle('active');
-  state.calcInput = '0';
-  state.calcPrev = null;
-  state.calcOp = null;
-  state.calcClearOnNext = false;
-  document.getElementById('calc-display').textContent = '0';
-}
 
-function handleCalcKey(key) {
-  haptic(15);
-  const display = document.getElementById('calc-display');
-  const currentPin = state.profile?.quickPin || '1234';
-
-  if (key === 'C') {
-    state.calcInput = '0';
-    state.calcPrev = null;
-    state.calcOp = null;
-    display.textContent = '0';
-    return;
-  }
-
-  if (key === '±') {
-    state.calcInput = String(-Number(state.calcInput));
-    display.textContent = state.calcInput;
-    return;
-  }
-
-  if (key === '%') {
-    state.calcInput = String(Number(state.calcInput) / 100);
-    display.textContent = state.calcInput;
-    return;
-  }
-
-  if (['+', '-', '*', '/'].includes(key)) {
-    state.calcPrev = Number(state.calcInput);
-    state.calcOp = key;
-    state.calcClearOnNext = true;
-    return;
-  }
-
-  if (key === '=') {
-    // Secret backdoor check: if typed number matches 4-digit quick PIN, unlock LunaCare!
-    if (state.calcInput === currentPin) {
-      toggleStealthCalculator();
-      showToast('🌸 Stealth Mode Unlocked!');
-      return;
-    }
-
-    if (state.calcOp && state.calcPrev !== null) {
-      const cur = Number(state.calcInput);
-      let result = 0;
-      if (state.calcOp === '+') result = state.calcPrev + cur;
-      if (state.calcOp === '-') result = state.calcPrev - cur;
-      if (state.calcOp === '*') result = state.calcPrev * cur;
-      if (state.calcOp === '/') result = cur !== 0 ? state.calcPrev / cur : 'Error';
-
-      state.calcInput = String(result);
-      display.textContent = state.calcInput;
-      state.calcOp = null;
-      state.calcPrev = null;
-      state.calcClearOnNext = true;
-    }
-    return;
-  }
-
-  // Digits & Dot
-  if (state.calcClearOnNext || state.calcInput === '0') {
-    state.calcInput = key === '.' ? '0.' : key;
-    state.calcClearOnNext = false;
-  } else {
-    if (key === '.' && state.calcInput.includes('.')) return;
-    if (state.calcInput.length < 10) state.calcInput += key;
-  }
-  display.textContent = state.calcInput;
-}
 
 // 4. Emergency SOS Cramp / Supply Alert
 function triggerSosAlert() {
