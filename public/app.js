@@ -932,47 +932,90 @@ async function loadNetworkInfo() {
 }
 
 // ================= Home View Rendering =================
+function handleRingClick() {
+  haptic(25);
+  if (!state.stats?.latestCycle) {
+    openStartCycleModal();
+  } else {
+    openLogModal();
+  }
+}
+
 function renderHome() {
   const stats = state.stats;
   if (!stats) return;
 
-  const dayNumberEl = document.getElementById('cycle-day-val');
-  const dayLabelEl = document.getElementById('cycle-day-label');
-  const phaseTagEl = document.getElementById('cycle-phase-tag');
+  const ringContentEl = document.getElementById('cycle-ring-content');
+  const ctaActionsEl = document.getElementById('home-cta-actions');
   const ringProgressEl = document.getElementById('cycle-ring-progress');
 
   const currCycleDay = stats.currentCycleDay || 1;
   const avgGap = stats.avgCycleGap || 28;
 
   if (stats.latestCycle) {
-    dayNumberEl.textContent = currCycleDay;
-    if (stats.isCurrentlyOnPeriod) {
-      dayLabelEl.textContent = 'Day of Period';
-      phaseTagEl.textContent = '🌸 Menstrual Phase';
-      phaseTagEl.style.background = '#ffe4e6';
-      phaseTagEl.style.color = '#e11d48';
-    } else if (currCycleDay <= 13) {
-      dayLabelEl.textContent = 'Day of Cycle';
-      phaseTagEl.textContent = '🌱 Follicular Phase';
-      phaseTagEl.style.background = '#f3e8ff';
-      phaseTagEl.style.color = '#9333ea';
-    } else if (currCycleDay <= 16) {
-      dayLabelEl.textContent = 'Day of Cycle';
-      phaseTagEl.textContent = '✨ Ovulation Window';
-      phaseTagEl.style.background = '#fdf2f8';
-      phaseTagEl.style.color = '#db2777';
-    } else {
-      dayLabelEl.textContent = 'Day of Cycle';
-      phaseTagEl.textContent = '🌙 Luteal Phase';
-      phaseTagEl.style.background = '#fef3c7';
-      phaseTagEl.style.color = '#d97706';
+    if (ringContentEl) {
+      let phaseBg = '#ffe4e6';
+      let phaseColor = '#e11d48';
+      let phaseText = '🌸 Menstrual Phase';
+      let dayLabel = 'Day of Bleeding';
+
+      if (!stats.isCurrentlyOnPeriod) {
+        if (currCycleDay <= 13) {
+          dayLabel = 'Day of Cycle';
+          phaseText = '🌱 Follicular Phase';
+          phaseBg = '#f3e8ff';
+          phaseColor = '#9333ea';
+        } else if (currCycleDay <= 16) {
+          dayLabel = 'Day of Cycle';
+          phaseText = '✨ Ovulation Window';
+          phaseBg = '#fdf2f8';
+          phaseColor = '#db2777';
+        } else {
+          dayLabel = 'Day of Cycle';
+          phaseText = '🌙 Luteal Phase';
+          phaseBg = '#fef3c7';
+          phaseColor = '#d97706';
+        }
+      }
+
+      ringContentEl.innerHTML = `
+        <span id="cycle-phase-tag" class="cycle-phase-tag" style="background:${phaseBg}; color:${phaseColor};">${phaseText}</span>
+        <span id="cycle-day-val" class="cycle-day-number">${currCycleDay}</span>
+        <span id="cycle-day-label" class="cycle-day-label">${dayLabel}</span>
+      `;
+    }
+
+    if (ctaActionsEl) {
+      ctaActionsEl.innerHTML = `
+        <button class="btn btn-primary" onclick="openLogModal()">
+          🌸 + Log Today's Flow & Symptoms
+        </button>
+        <button class="btn btn-secondary" onclick="openStartCycleModal()" style="font-size:0.86rem; padding:9px 14px;">
+          🩸 Period Started (New Cycle)
+        </button>
+      `;
     }
   } else {
-    dayNumberEl.textContent = '--';
-    dayLabelEl.textContent = 'No Period Logged Yet';
-    phaseTagEl.textContent = 'Tap to Start Cycle';
-    phaseTagEl.style.background = 'var(--bg-subtle)';
-    phaseTagEl.style.color = 'var(--text-muted)';
+    if (ringContentEl) {
+      ringContentEl.innerHTML = `
+        <div class="ring-period-btn" onclick="event.stopPropagation(); openStartCycleModal();" role="button" aria-label="Period Started">
+          <span class="ring-btn-icon">🩸</span>
+          <span class="ring-btn-title">Period Started</span>
+          <span class="ring-btn-sub">Tap to start cycle</span>
+        </div>
+      `;
+    }
+
+    if (ctaActionsEl) {
+      ctaActionsEl.innerHTML = `
+        <button class="btn btn-primary" onclick="openStartCycleModal()">
+          🩸 Period Started
+        </button>
+        <button class="btn btn-secondary" onclick="openLogModal()" style="font-size:0.86rem; padding:9px 14px;">
+          🌸 + Log Today's Symptoms
+        </button>
+      `;
+    }
   }
 
   // Update Progress Ring (circumference: 2 * PI * 92 = ~578)
@@ -986,21 +1029,25 @@ function renderHome() {
 
   // Meta Cards
   const gapValEl = document.getElementById('meta-day-gap');
-  gapValEl.textContent = stats.latestCycle ? `${avgGap} Days` : '--';
+  if (gapValEl) {
+    gapValEl.textContent = stats.latestCycle ? `${avgGap} Days` : '--';
+  }
 
   const nextCountEl = document.getElementById('meta-next-period');
   const nextDateEl = document.getElementById('meta-next-date');
 
-  if (stats.latestCycle && stats.daysUntilNextPeriod !== null && stats.daysUntilNextPeriod !== undefined) {
-    if (stats.daysUntilNextPeriod > 0) {
-      nextCountEl.textContent = `In ${stats.daysUntilNextPeriod} Days`;
-    } else if (stats.daysUntilNextPeriod === 0) {
-      nextCountEl.textContent = `Expected Today`;
+  if (nextCountEl) {
+    if (stats.latestCycle && stats.daysUntilNextPeriod !== null && stats.daysUntilNextPeriod !== undefined) {
+      if (stats.daysUntilNextPeriod > 0) {
+        nextCountEl.textContent = `In ${stats.daysUntilNextPeriod} Days`;
+      } else if (stats.daysUntilNextPeriod === 0) {
+        nextCountEl.textContent = `Expected Today`;
+      } else {
+        nextCountEl.textContent = `${Math.abs(stats.daysUntilNextPeriod)} Days Late`;
+      }
     } else {
-      nextCountEl.textContent = `${Math.abs(stats.daysUntilNextPeriod)} Days Late`;
+      nextCountEl.textContent = 'Log Period to Predict';
     }
-  } else {
-    nextCountEl.textContent = 'Log Period to Predict';
   }
 
   // Display predicted exact calendar date
@@ -1024,146 +1071,36 @@ function renderHome() {
   const todayWaterEl = document.getElementById('today-water-val');
 
   if (todayLog) {
-    todayPadsEl.textContent = `${todayLog.padsUsed || 0} Pads`;
-    todayPainEl.textContent = `${todayLog.painLevel || 0}/10`;
-    todayFlowEl.textContent = (todayLog.flow || 'None').toUpperCase();
-    todayFlowEl.className = `highlight-badge badge-flow-${todayLog.flow || 'none'}`;
+    if (todayPadsEl) todayPadsEl.textContent = `${todayLog.padsUsed || 0} Pads`;
+    if (todayPainEl) todayPainEl.textContent = `${todayLog.painLevel || 0}/10`;
+    if (todayFlowEl) {
+      todayFlowEl.textContent = (todayLog.flow || 'None').toUpperCase();
+      todayFlowEl.className = `highlight-badge badge-flow-${todayLog.flow || 'none'}`;
+    }
 
     const waterL = todayLog.meals?.waterLitres || (todayLog.meals?.waterGlasses ? (todayLog.meals.waterGlasses * 0.25).toFixed(2) : 1.5);
     if (todayWaterEl) todayWaterEl.textContent = `${waterL} L`;
   } else {
-    todayPadsEl.textContent = '0 Pads';
-    todayPainEl.textContent = 'None logged';
-    todayFlowEl.textContent = 'NOT LOGGED';
-    todayFlowEl.className = 'highlight-badge badge-flow-none';
+    if (todayPadsEl) todayPadsEl.textContent = '0 Pads';
+    if (todayPainEl) todayPainEl.textContent = 'None logged';
+    if (todayFlowEl) {
+      todayFlowEl.textContent = 'NOT LOGGED';
+      todayFlowEl.className = 'highlight-badge badge-flow-none';
+    }
     if (todayWaterEl) todayWaterEl.textContent = '1.5 L';
   }
 
-  // Render TTC Conception Mode vs Period Mode
-  const ttcBanner = document.getElementById('home-ttc-banner');
+  // Update mode option toggle pills in Profile view
   const optPeriod = document.getElementById('mode-opt-period');
   const optTtc = document.getElementById('mode-opt-ttc');
   if (optPeriod && optTtc) {
     if (state.trackerMode === 'ttc') {
       optTtc.classList.add('active');
       optPeriod.classList.remove('active');
-      if (ttcBanner) {
-        ttcBanner.style.display = 'block';
-        const ttcChance = document.getElementById('ttc-chance-text');
-        const ttcAdvice = document.getElementById('ttc-advice-text');
-        if (currCycleDay >= 10 && currCycleDay <= 17) {
-          ttcChance.textContent = '🌟 Peak Conception Window';
-          ttcAdvice.textContent = 'High fertility probability. Ovulation surge occurs around this window.';
-        } else if (currCycleDay < 10) {
-          ttcChance.textContent = '🌱 Low Conception Probability';
-          ttcAdvice.textContent = 'Pre-ovulation follicular development. Conception window begins in a few days.';
-        } else {
-          ttcChance.textContent = '🌙 Post-Ovulation Phase';
-          ttcAdvice.textContent = 'Luteal phase. Fertile window closed for this cycle.';
-        }
-      }
     } else {
       optPeriod.classList.add('active');
       optTtc.classList.remove('active');
-      if (ttcBanner) ttcBanner.style.display = 'none';
     }
-  }
-
-  // Render PCOS & Hormonal Health Score Card
-  const pcosTitleEl = document.getElementById('pcos-status-title');
-  const pcosBadgeEl = document.getElementById('pcos-badge-pill');
-  const pcosFillEl = document.getElementById('pcos-meter-fill');
-  const pcosDescEl = document.getElementById('pcos-desc-text');
-  if (pcosTitleEl && stats.pcos) {
-    pcosTitleEl.textContent = stats.pcos.title;
-    pcosBadgeEl.textContent = stats.pcos.badge;
-    pcosBadgeEl.style.background = stats.pcos.color + '22';
-    pcosBadgeEl.style.color = stats.pcos.color;
-    pcosFillEl.style.width = stats.pcos.score + '%';
-    pcosFillEl.style.background = stats.pcos.color;
-    pcosDescEl.textContent = stats.pcos.desc;
-  }
-
-
-
-  // Render Irregularity Health Alert Banner
-  const alertEl = document.getElementById('home-irregular-alert');
-  if (alertEl) {
-    if (stats.irregularity && stats.irregularity.isIrregular) {
-      alertEl.style.display = 'block';
-      alertEl.className = 'alert-irregular';
-      alertEl.innerHTML = `
-        <div class="alert-irregular-title">⚠️ Cycle Health Note</div>
-        <div>${stats.irregularity.reason}</div>
-        <button class="alert-irregular-btn" onclick="openTalkingPointsModal()">View Gynecologist Discussion Guide →</button>
-      `;
-    } else {
-      alertEl.style.display = 'none';
-    }
-  }
-
-  // Render Dynamic Phase Wellness & Nutrition Advice Card
-  const wellnessEl = document.getElementById('home-phase-wellness');
-  if (wellnessEl) {
-    let advice = {
-      title: "🌸 Menstrual Phase Care",
-      foods: "Iron-rich spinach, dark chocolate, hot soups, turmeric",
-      workout: "Rest, gentle pelvic stretches, slow walks",
-      selfCare: "Warm bath, heating pad on abdomen, early sleep"
-    };
-    if (!stats.isCurrentlyOnPeriod) {
-      if (currCycleDay <= 13) {
-        advice = {
-          title: "🌱 Follicular Phase Energy",
-          foods: "Fermented kimchi/yogurt, lean proteins, avocados, pumpkin seeds",
-          workout: "HIIT, cardio, strength training (peak energy window)",
-          selfCare: "Set monthly goals, plan social catchups and new projects"
-        };
-      } else if (currCycleDay <= 16) {
-        advice = {
-          title: "✨ Ovulation Window Glow",
-          foods: "Berries, antioxidant-rich fruits, zinc, fresh leafy greens",
-          workout: "Running, circuit workouts, high-intensity movement",
-          selfCare: "Highest confidence and social vitality of the cycle"
-        };
-      } else {
-        advice = {
-          title: "🌙 Luteal Phase Calming",
-          foods: "Magnesium rich nuts, sweet potatoes, complex carbs (calms cravings)",
-          workout: "Pilates, yoga, light resistance training",
-          selfCare: "Hydration to ease bloating, boundary setting, calming bedtime tea"
-        };
-      }
-    }
-
-    wellnessEl.innerHTML = `
-      <div class="phase-wellness-header">
-        <div class="phase-wellness-title">${advice.title}</div>
-      </div>
-      <div class="wellness-grid">
-        <div class="wellness-row">
-          <span class="wellness-icon">🥑</span>
-          <div class="wellness-body">
-            <span class="wellness-tag">Nourishing Foods</span>
-            <span>${advice.foods}</span>
-          </div>
-        </div>
-        <div class="wellness-row">
-          <span class="wellness-icon">🧘‍♀️</span>
-          <div class="wellness-body">
-            <span class="wellness-tag">Movement & Energy</span>
-            <span>${advice.workout}</span>
-          </div>
-        </div>
-        <div class="wellness-row">
-          <span class="wellness-icon">🌙</span>
-          <div class="wellness-body">
-            <span class="wellness-tag">Self-Care & Mind</span>
-            <span>${advice.selfCare}</span>
-          </div>
-        </div>
-      </div>
-    `;
   }
 }
 
@@ -1803,6 +1740,110 @@ function renderAnalytics() {
   const fluidChips = fluidEntries.map(([f, c]) => `<span class="select-chip">${f.toUpperCase()} (${c})</span>`).join(' ') || '<span style="color:var(--text-muted); font-size:0.82rem;">No cervical fluid logged yet</span>';
   const bbtEntries = (stats.biomarkers?.bbtRecent || []).map(b => `<span class="pill-sm">${b.date}: <strong>${b.bbt}°F</strong></span>`).join(' ') || '<span style="color:var(--text-muted); font-size:0.82rem;">No temperatures logged yet</span>';
 
+  // PCOS Hormonal Health Card
+  let pcosCardHtml = '';
+  if (stats.pcos) {
+    pcosCardHtml = `
+      <div class="card pcos-score-card">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div style="font-size:0.75rem; font-weight:800; text-transform:uppercase; color:var(--secondary);">Hormonal Health Assessment</div>
+            <h4 style="font-size:1rem; font-weight:900; margin:2px 0;">${stats.pcos.title}</h4>
+          </div>
+          <span class="diff-badge" style="background:${stats.pcos.color}22; color:${stats.pcos.color};">${stats.pcos.badge}</span>
+        </div>
+        <div class="pcos-meter-wrap" style="margin:10px 0 6px;">
+          <div class="pcos-meter-bar" style="width:${stats.pcos.score}%; background:${stats.pcos.color};"></div>
+        </div>
+        <p style="font-size:0.78rem; color:var(--text-muted); margin:0;">
+          ${stats.pcos.desc}
+        </p>
+      </div>
+    `;
+  }
+
+  // Phase Wellness Advice
+  const currCycleDay = stats.currentCycleDay || 1;
+  let advice = {
+    title: "🌸 Menstrual Phase Care",
+    foods: "Iron-rich spinach, dark chocolate, hot soups, turmeric",
+    workout: "Rest, gentle pelvic stretches, slow walks",
+    selfCare: "Warm bath, heating pad on abdomen, early sleep"
+  };
+  if (!stats.isCurrentlyOnPeriod) {
+    if (currCycleDay <= 13) {
+      advice = {
+        title: "🌱 Follicular Phase Energy",
+        foods: "Fermented kimchi/yogurt, lean proteins, avocados, pumpkin seeds",
+        workout: "HIIT, cardio, strength training (peak energy window)",
+        selfCare: "Set monthly goals, plan social catchups and new projects"
+      };
+    } else if (currCycleDay <= 16) {
+      advice = {
+        title: "✨ Ovulation Window Glow",
+        foods: "Berries, antioxidant-rich fruits, zinc, fresh leafy greens",
+        workout: "Running, circuit workouts, high-intensity movement",
+        selfCare: "Highest confidence and social vitality of the cycle"
+      };
+    } else {
+      advice = {
+        title: "🌙 Luteal Phase Calming",
+        foods: "Magnesium rich nuts, sweet potatoes, complex carbs",
+        workout: "Pilates, yoga, light resistance training",
+        selfCare: "Hydration to ease bloating, boundary setting, calming bedtime tea"
+      };
+    }
+  }
+
+  const phaseWellnessHtml = `
+    <div class="card phase-wellness-card" style="margin:0;">
+      <div class="phase-wellness-header">
+        <div class="phase-wellness-title">${advice.title}</div>
+      </div>
+      <div class="wellness-grid">
+        <div class="wellness-row">
+          <span class="wellness-icon">🥑</span>
+          <div class="wellness-body">
+            <span class="wellness-tag">Nourishing Foods</span>
+            <span>${advice.foods}</span>
+          </div>
+        </div>
+        <div class="wellness-row">
+          <span class="wellness-icon">🧘‍♀️</span>
+          <div class="wellness-body">
+            <span class="wellness-tag">Movement & Energy</span>
+            <span>${advice.workout}</span>
+          </div>
+        </div>
+        <div class="wellness-row">
+          <span class="wellness-icon">🌙</span>
+          <div class="wellness-body">
+            <span class="wellness-tag">Self-Care & Mind</span>
+            <span>${advice.selfCare}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Clinical Consultation & Doctor Tools
+  const clinicalReportsHtml = `
+    <div class="card">
+      <h3 style="font-size:1.05rem; font-weight:800; margin-bottom:6px;">🩺 Gynecologist & Clinical Reports</h3>
+      <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:12px;">
+        Evidence-based talking points and comprehensive clinical summary for your next doctor or OB-GYN appointment.
+      </p>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <button class="btn btn-secondary" style="font-size:0.84rem; padding:10px;" onclick="openTalkingPointsModal()">
+          🩺 Gyno Guide
+        </button>
+        <button class="btn btn-secondary" style="font-size:0.84rem; padding:10px;" onclick="openDoctorReport()">
+          📋 Doctor Report
+        </button>
+      </div>
+    </div>
+  `;
+
   container.innerHTML = `
     <div class="card card-hero">
       <h2 style="font-size:1.3rem; font-weight:800; margin-bottom:8px;">Menstrual Cycle Analytics</h2>
@@ -1822,6 +1863,12 @@ function renderAnalytics() {
     </div>
 
     ${compareHtml}
+
+    ${pcosCardHtml}
+
+    ${phaseWellnessHtml}
+
+    ${clinicalReportsHtml}
 
     <div class="card">
       <h3 style="font-size:1.05rem; font-weight:800; margin-bottom:14px;">Pad Consumption & Pain Trends</h3>

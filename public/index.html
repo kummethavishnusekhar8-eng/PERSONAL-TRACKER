@@ -140,10 +140,12 @@
                 <circle class="ring-bg" cx="100" cy="100" r="92"></circle>
                 <circle id="cycle-ring-progress" class="ring-progress" cx="100" cy="100" r="92" stroke-dasharray="578" stroke-dashoffset="0"></circle>
               </svg>
-              <div class="cycle-ring-content">
-                <span id="cycle-phase-tag" class="cycle-phase-tag" style="background:var(--bg-subtle); color:var(--text-muted);">No Active Cycle</span>
-                <span id="cycle-day-val" class="cycle-day-number">--</span>
-                <span id="cycle-day-label" class="cycle-day-label">No Period Logged Yet</span>
+              <div class="cycle-ring-content" id="cycle-ring-content" onclick="handleRingClick()" style="cursor:pointer;" title="Tap to start cycle or log symptoms">
+                <div class="ring-period-btn" onclick="event.stopPropagation(); openStartCycleModal();" role="button" aria-label="Period Started">
+                  <span class="ring-btn-icon">🩸</span>
+                  <span class="ring-btn-title">Period Started</span>
+                  <span class="ring-btn-sub">Tap to start cycle</span>
+                </div>
               </div>
             </div>
 
@@ -162,72 +164,16 @@
             </div>
           </div>
 
-          <!-- Primary CTA Button -->
-          <button class="btn btn-primary" onclick="openLogModal()">
-            🌸 + Log Today's Flow & Symptoms
-          </button>
-        </div>
-
-        <!-- Quick Action Buttons -->
-        <div class="action-grid" style="grid-template-columns: repeat(3, 1fr);">
-          <div class="quick-action-btn" onclick="openStartCycleModal()">
-            <span class="quick-action-icon">🩸</span>
-            <span class="quick-action-label">Period Started</span>
-          </div>
-          <div class="quick-action-btn" onclick="openTalkingPointsModal()">
-            <span class="quick-action-icon">🩺</span>
-            <span class="quick-action-label">Gyno Guide</span>
-          </div>
-          <div class="quick-action-btn" onclick="openDoctorReport()">
-            <span class="quick-action-icon">📋</span>
-            <span class="quick-action-label">Doctor Report</span>
+          <!-- Primary & Secondary CTA Action Buttons -->
+          <div id="home-cta-actions" class="home-cta-group">
+            <button class="btn btn-primary" onclick="openStartCycleModal()">
+              🩸 Period Started
+            </button>
+            <button class="btn btn-secondary" onclick="openLogModal()">
+              🌸 + Log Today's Flow & Symptoms
+            </button>
           </div>
         </div>
-
-        <!-- Mode Toggle: Period Tracking vs Trying To Conceive (TTC) -->
-        <div style="display:flex; justify-content:center; margin-bottom:12px;">
-          <div class="mode-toggle-pill">
-            <span id="mode-opt-period" class="mode-toggle-opt active" onclick="switchTrackerMode('period')">🩸 Period & Cycle Mode</span>
-            <span id="mode-opt-ttc" class="mode-toggle-opt" onclick="switchTrackerMode('ttc')">👶 Conception / TTC Mode</span>
-          </div>
-        </div>
-
-        <!-- Trying to Conceive (TTC) Dynamic Fertility Banner -->
-        <div id="home-ttc-banner" class="card" style="display:none; background:linear-gradient(135deg, #fdf4ff, #fae8ff); border:1px solid #f0abfc;">
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <div>
-              <div style="font-size:0.75rem; font-weight:800; color:#c026d3; text-transform:uppercase;">Fertility & Ovulation Tracker</div>
-              <h3 id="ttc-chance-text" style="font-size:1.15rem; font-weight:900; color:#86198f; margin:2px 0;">Peak Conception Window</h3>
-              <p id="ttc-advice-text" style="font-size:0.8rem; color:#701a75;">High chance of pregnancy today. Ovulation predicted around fertile window.</p>
-            </div>
-            <span style="font-size:2.2rem;">✨</span>
-          </div>
-        </div>
-
-        <!-- PCOS & Hormonal Health Score Card -->
-        <div id="home-pcos-card" class="pcos-score-card">
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <div>
-              <div style="font-size:0.75rem; font-weight:800; text-transform:uppercase; color:var(--secondary);">Hormonal Health Assessment</div>
-              <h4 id="pcos-status-title" style="font-size:1rem; font-weight:900; margin:2px 0;">Healthy Regular Cycle</h4>
-            </div>
-            <span id="pcos-badge-pill" class="diff-badge diff-better">Optimal</span>
-          </div>
-          <div class="pcos-meter-wrap">
-            <div id="pcos-meter-fill" class="pcos-meter-bar" style="width:15%; background:#10b981;"></div>
-          </div>
-          <p id="pcos-desc-text" style="font-size:0.78rem; color:var(--text-muted); margin:0;">
-            Cycle length and symptoms are within optimal range (21–35 days).
-          </p>
-        </div>
-
-
-
-        <!-- Irregular Cycle / PMS Health Alert Banner -->
-        <div id="home-irregular-alert" style="display:none;"></div>
-
-        <!-- Dynamic Cycle Phase Diet & Wellness Tips -->
-        <div id="home-phase-wellness" class="phase-wellness-card"></div>
 
         <!-- Today's Log Highlights Card -->
         <div class="card">
@@ -315,6 +261,23 @@
           <img src="/icon.svg" style="width:68px; height:68px; margin:0 auto 10px;" alt="Profile Avatar">
           <h2 id="profile-user-name" style="font-size:1.3rem; font-weight:800;">My LunaCare Profile</h2>
           <p id="profile-user-sub" style="color:var(--text-muted); font-size:0.85rem;">Private Health Data</p>
+        </div>
+
+        <!-- Cycle Tracking Mode Preference -->
+        <div class="card">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <h3 style="font-size:1.05rem; font-weight:800;">⚙️ Cycle Tracking Mode</h3>
+            <span class="pill-sm" style="background:var(--primary-light); color:var(--primary);">Active</span>
+          </div>
+          <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:12px;">
+            Choose between standard menstrual cycle tracking and conception planning.
+          </p>
+          <div style="display:flex; justify-content:center;">
+            <div class="mode-toggle-pill" style="width:100%; max-width:380px;">
+              <span id="mode-opt-period" class="mode-toggle-opt active" onclick="switchTrackerMode('period')">🩸 Period Tracking</span>
+              <span id="mode-opt-ttc" class="mode-toggle-opt" onclick="switchTrackerMode('ttc')">👶 Conception / TTC</span>
+            </div>
+          </div>
         </div>
 
         <!-- Personal Health & Biometrics Details Card -->
