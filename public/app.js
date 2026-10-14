@@ -534,11 +534,19 @@ async function handleClientStorageFallback(path, options = {}) {
     }
 
     // STRICT CHECK: VERIFY PASSWORD
+    const inputHash = await hashClientPassword(password);
     if (account.passwordHash) {
-      const inputHash = await hashClientPassword(password);
       if (inputHash !== account.passwordHash) {
         throw new Error('Incorrect password. Please verify and try again.');
       }
+    } else if (account.isLegacy) {
+      // First time logging into legacy account: establish and lock this password!
+      account.passwordHash = inputHash;
+      if (window.LunaCloudSync) {
+        await window.LunaCloudSync.setAccountPassword(email, inputHash);
+      }
+    } else {
+      throw new Error('Incorrect password. Please verify and try again.');
     }
 
     // User is verified!
@@ -911,6 +919,26 @@ function hideAuthView() {
   document.getElementById('main-app-content').style.display = 'flex';
   document.querySelector('.bottom-nav').style.display = 'grid';
   document.querySelector('.app-header').style.display = 'flex';
+}
+
+function togglePasswordVisibility() {
+  haptic(20);
+  const pwdInput = document.getElementById('auth-password');
+  const toggleBtn = document.getElementById('toggle-password-visibility');
+  if (!pwdInput) return;
+  if (pwdInput.type === 'password') {
+    pwdInput.type = 'text';
+    if (toggleBtn) {
+      toggleBtn.textContent = '🙈';
+      toggleBtn.title = 'Hide password';
+    }
+  } else {
+    pwdInput.type = 'password';
+    if (toggleBtn) {
+      toggleBtn.textContent = '👁️';
+      toggleBtn.title = 'Show password';
+    }
+  }
 }
 
 function logout() {

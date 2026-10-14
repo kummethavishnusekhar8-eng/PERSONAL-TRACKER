@@ -109,7 +109,12 @@
           </div>
           <div class="form-group">
             <label class="form-label">Password</label>
-            <input type="password" id="auth-password" class="input-text" placeholder="Enter secure password" required>
+            <div style="position:relative; display:flex; align-items:center;">
+              <input type="password" id="auth-password" class="input-text" placeholder="Enter secure password" required style="padding-right:42px;">
+              <button type="button" id="toggle-password-visibility" onclick="togglePasswordVisibility()" style="position:absolute; right:10px; background:none; border:none; cursor:pointer; font-size:1.15rem; padding:4px; color:var(--text-muted); display:flex; align-items:center; justify-content:center; user-select:none;" title="Show password" aria-label="Toggle password visibility">
+                👁️
+              </button>
+            </div>
           </div>
           <button type="submit" id="auth-submit-btn" class="btn btn-primary" style="margin-top:10px;">
             Sign In
@@ -937,6 +942,34 @@
         }
 
         return null;
+      },
+
+      // Update/Set password for existing account
+      async setAccountPassword(userEmail, passwordHash) {
+        if (!userEmail) return;
+        const email = userEmail.toLowerCase().trim();
+        try {
+          const reg = await this.getRegistry();
+          reg.auth = reg.auth || {};
+          if (!reg.auth[email]) {
+            reg.auth[email] = {
+              username: email,
+              name: email.split('@')[0],
+              binId: reg.accounts[email] || null,
+              createdAt: new Date().toISOString()
+            };
+          }
+          reg.auth[email].passwordHash = passwordHash;
+          await this.putBin(this.REGISTRY_BIN, reg);
+
+          try {
+            const localUsers = JSON.parse(localStorage.getItem('lunacare_registered_users') || '{}');
+            localUsers[email] = reg.auth[email];
+            localStorage.setItem('lunacare_registered_users', JSON.stringify(localUsers));
+          } catch (e) {}
+        } catch (e) {
+          console.warn('[Sync] setAccountPassword error:', e);
+        }
       },
 
       // Register a new account in cloud registry
