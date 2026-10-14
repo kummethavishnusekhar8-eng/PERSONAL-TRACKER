@@ -49,6 +49,25 @@ const state = {
   trackerMode: localStorage.getItem('lunacare_mode') || 'period' // 'period' or 'ttc'
 };
 
+// Client Password Hashing (SHA-256 with Salt)
+async function hashClientPassword(password) {
+  try {
+    const enc = new TextEncoder();
+    const data = enc.encode('lunacare_salt_v2_' + password);
+    const hashBuf = await crypto.subtle.digest('SHA-256', data);
+    const hashArr = Array.from(new Uint8Array(hashBuf));
+    return hashArr.map(b => b.toString(16).padStart(2, '0')).join('');
+  } catch (e) {
+    let hash = 0;
+    const str = 'lunacare_salt_v2_' + password;
+    for (let i = 0; i < str.length; i++) {
+      hash = ((hash << 5) - hash) + str.charCodeAt(i);
+      hash |= 0;
+    }
+    return 'h_' + Math.abs(hash);
+  }
+}
+
 // API Helper with full Netlify / Serverless Offline LocalStorage fallback
 async function api(path, options = {}) {
   const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
@@ -65,11 +84,25 @@ async function api(path, options = {}) {
       showToast('Session expired. Please log in.');
       throw new Error('Unauthorized');
     }
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Server request failed');
-    return data;
+
+    // If server responded with an error for auth (e.g. 401 Invalid credentials, 409 user exists)
+    if (path.includes('/auth/') && (res.status === 400 || res.status === 401 || res.status === 409)) {
+      const errData = await res.json().catch(() => null);
+      throw new Error(errData?.error || 'Authentication failed');
+    }
+
+    if (res.ok) {
+      return await res.json();
+    }
+
+    // If 404 (static Netlify) or other non-auth error, fallback to client storage
+    return handleClientStorageFallback(path, options);
   } catch (err) {
-    // If running on Netlify Static Hosting (where Node server isn't running), seamlessly handle via LocalStorage
+    // If it's a real auth rejection error, rethrow so user sees the message
+    if (err.message && (err.message.includes('password') || err.message.includes('exists') || err.message.includes('account found') || err.message.includes('Authentication failed') || err.message.includes('Invalid username or password') || err.message.includes('Incorrect'))) {
+      throw err;
+    }
+    // Otherwise fallback to client storage engine
     return handleClientStorageFallback(path, options);
   }
 }
@@ -132,6 +165,7 @@ function getClientDb(specificUser = null) {
       }
     });
     if (!parsed.profile) parsed.profile = { quickPin: null, avgCycleLength: 28, avgPeriodDuration: 5 };
+    if (user && !parsed.username) parsed.username = user;
     return parsed;
   } catch {
     return defaultDb;
@@ -139,7 +173,9 @@ function getClientDb(specificUser = null) {
 }
 
 function saveClientDb(db, specificUser = null) {
-  const key = getUserStorageKey(specificUser || db.username);
+  const user = specificUser || db.username || state.user?.username;
+  if (user && !db.username) db.username = user;
+  const key = getUserStorageKey(user);
   localStorage.setItem(key, JSON.stringify(db));
 }
 
@@ -406,72 +442,143 @@ async function saveProfileDetails(e) {
 async function handleClientStorageFallback(path, options = {}) {
   const method = (options.method || 'GET').toUpperCase();
   const body = options.body ? JSON.parse(options.body) : {};
-  const db = getClientDb();
+  const currentUser = state.user?.username || null;
+  const db = getClientDb(currentUser);
 
   if (path === '/api/network-info') {
     return { networkUrls: [], port: 443 };
   }
 
-  // Account Authentication with automatic cloud data loading
-  if (path === '/api/auth/register' || path === '/api/auth/login') {
-    let email = (body.username || 'user@lunacare.com').trim().toLowerCase();
-    const password = body.password || 'password123';
-    const name = body.name || email.split('@')[0];
-    const userId = 'u_' + btoa(email).replace(/[^a-zA-Z0-9]/g, '');
+  // 1. REGISTER: Create a new account
+  if (path === '/api/auth/register') {
+    const email = (body.username || '').trim().toLowerCase();
+    const password = (body.password || '').trim();
+    const name = (body.name || email.split('@')[0] || '').trim();
 
-    let user = { id: userId, username: email, name, pin: null, password };
+    if (!email || !password) {
+      throw new Error('Email/username and password are required.');
+    }
+    if (password.length < 4) {
+      throw new Error('Password must be at least 4 characters long.');
+    }
 
-    // Load account-specific database for this email
-    let userDb = getClientDb(email);
-
-    // Check Cloud for existing account data
-    let hadCloudData = false;
+    // Check if account already exists
     if (window.LunaCloudSync) {
-      const cloudData = await window.LunaCloudSync.loadUserData(email);
-      if (cloudData && ((cloudData.cycles && cloudData.cycles.length > 0) || (cloudData.logs && Object.keys(cloudData.logs).length > 0) || cloudData.profile)) {
-        hadCloudData = true;
-        userDb.cycles = (cloudData.cycles || []).filter(c => c.id !== 'c_1' && c.id !== 'c_2' && c.startDate !== '2026-09-12');
-        userDb.logs = cloudData.logs || {};
-        userDb.profile = { ...(userDb.profile || {}), ...(cloudData.profile || {}) };
-        saveClientDb(userDb, email);
+      const existing = await window.LunaCloudSync.getAccountAuth(email);
+      if (existing) {
+        throw new Error('An account with this email/username already exists. Please Sign In.');
       }
     }
 
-    // If new account or no cloud data existed, guarantee 100% clean state (0 cycles, 0 demo logs)
-    if (!hadCloudData) {
-      userDb.cycles = [];
-      userDb.logs = {};
-      userDb.profile = {
+    const passwordHash = await hashClientPassword(password);
+    let userRec;
+    if (window.LunaCloudSync) {
+      userRec = await window.LunaCloudSync.registerAccount(email, passwordHash, name);
+    } else {
+      userRec = {
+        id: 'u_' + btoa(email).replace(/[^a-zA-Z0-9]/g, ''),
+        username: email,
+        name,
+        passwordHash
+      };
+    }
+
+    // Initialize 100% clean account for this user
+    const userDb = {
+      username: email,
+      cycles: [],
+      logs: {},
+      profile: {
         name,
         quickPin: null,
         avgCycleLength: 28,
         avgPeriodDuration: 5
-      };
-      saveClientDb(userDb, email);
-    }
-
-    const token = 'token_' + userId;
-    let existing = (userDb.users || []).find(u => u.username === email);
-    if (!existing) {
-      userDb.users = [user];
-    } else {
-      user = existing;
-    }
+      }
+    };
     saveClientDb(userDb, email);
+
+    const token = 'token_' + userRec.id;
+    const user = { id: userRec.id, username: email, name };
 
     state.user = user;
     state.token = token;
     state.profile = userDb.profile;
+    state.cycles = [];
+    state.logs = {};
+    state.stats = computeClientStats(userDb);
+
+    return { token, user, hasPin: false, message: 'Account created successfully!' };
+  }
+
+  // 2. LOGIN: Authenticate existing account
+  if (path === '/api/auth/login') {
+    const email = (body.username || '').trim().toLowerCase();
+    const password = (body.password || '').trim();
+
+    if (!email || !password) {
+      throw new Error('Please enter username/email and password.');
+    }
+
+    // Look up account in registry
+    let account = null;
+    if (window.LunaCloudSync) {
+      account = await window.LunaCloudSync.getAccountAuth(email);
+    } else {
+      const localUsers = JSON.parse(localStorage.getItem('lunacare_registered_users') || '{}');
+      account = localUsers[email] || null;
+    }
+
+    // STRICT CHECK: IF ACCOUNT DOES NOT EXIST, REJECT!
+    if (!account) {
+      throw new Error('No account found for "' + email + '". Please click "Create Free Account" below to sign up first.');
+    }
+
+    // STRICT CHECK: VERIFY PASSWORD
+    if (account.passwordHash) {
+      const inputHash = await hashClientPassword(password);
+      if (inputHash !== account.passwordHash) {
+        throw new Error('Incorrect password. Please verify and try again.');
+      }
+    }
+
+    // User is verified!
+    const userId = account.id || ('u_' + btoa(email).replace(/[^a-zA-Z0-9]/g, ''));
+    const token = 'token_' + userId;
+    const user = { id: userId, username: email, name: account.name || email.split('@')[0] };
+
+    // Load account database
+    let userDb = getClientDb(email);
+
+    // Pull cloud data for this email (if available)
+    if (window.LunaCloudSync) {
+      try {
+        const cloudData = await window.LunaCloudSync.loadUserData(email);
+        if (cloudData) {
+          if (Array.isArray(cloudData.cycles) && cloudData.cycles.length > 0) {
+            userDb.cycles = cloudData.cycles;
+          }
+          if (cloudData.logs && Object.keys(cloudData.logs).length > 0) {
+            userDb.logs = cloudData.logs;
+          }
+          if (cloudData.profile) {
+            userDb.profile = { ...(userDb.profile || {}), ...cloudData.profile };
+          }
+          saveClientDb(userDb, email);
+        }
+      } catch (err) {
+        console.warn('Login cloud pull error:', err);
+      }
+    }
+
+    state.user = user;
+    state.token = token;
+    state.profile = userDb.profile || {};
     state.cycles = userDb.cycles || [];
     state.logs = userDb.logs || {};
     state.stats = computeClientStats(userDb);
 
     const hasPin = Boolean(userDb.profile && userDb.profile.quickPin);
-
-    // Sync state
-    await pushToCloudSync();
-
-    return { token, user, hasPin, message: 'Success' };
+    return { token, user, hasPin, message: 'Welcome back!' };
   }
 
   if (path === '/api/auth/verify-pin') {
@@ -483,21 +590,25 @@ async function handleClientStorageFallback(path, options = {}) {
   }
 
   if (path === '/api/auth/me') {
-    const stats = computeClientStats(db);
-    const user = state.user || db.users[0];
-    return { user, profile: db.profile, stats };
+    if (!state.user) throw new Error('Not authenticated');
+    const userDb = getClientDb(state.user.username);
+    const stats = computeClientStats(userDb);
+    return { user: state.user, profile: userDb.profile, stats };
   }
 
   if (path === '/api/cycles' && method === 'GET') {
-    return { cycles: db.cycles, stats: computeClientStats(db) };
+    const userDb = getClientDb(currentUser);
+    return { cycles: userDb.cycles || [], stats: computeClientStats(userDb) };
   }
 
   if (path === '/api/cycles' && method === 'POST') {
+    const userDb = getClientDb(currentUser);
     const { startDate, startTime, endDate, notes } = body;
-    db.cycles.sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
+    userDb.cycles = userDb.cycles || [];
+    userDb.cycles.sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
     let dayGap = null;
-    if (db.cycles.length > 0) {
-      const last = db.cycles[db.cycles.length - 1];
+    if (userDb.cycles.length > 0) {
+      const last = userDb.cycles[userDb.cycles.length - 1];
       dayGap = Math.round((new Date(startDate) - new Date(last.startDate)) / (1000 * 60 * 60 * 24));
     }
     const cycle = {
@@ -509,63 +620,72 @@ async function handleClientStorageFallback(path, options = {}) {
       notes: notes || '',
       createdAt: new Date().toISOString()
     };
-    db.cycles.push(cycle);
-    saveClientDb(db);
-    pushToCloudSync();
-    return { cycle, stats: computeClientStats(db) };
+    userDb.cycles.push(cycle);
+    saveClientDb(userDb, currentUser);
+    await pushToCloudSync();
+    return { cycle, stats: computeClientStats(userDb) };
   }
 
   if (path.startsWith('/api/cycles/') && method === 'PUT') {
+    const userDb = getClientDb(currentUser);
     const id = path.split('/')[3];
-    const c = db.cycles.find(item => item.id === id);
+    const c = (userDb.cycles || []).find(item => item.id === id);
     if (c) {
       if (body.startDate) c.startDate = body.startDate;
       if (body.startTime) c.startTime = body.startTime;
       if (body.endDate !== undefined) c.endDate = body.endDate;
       if (body.notes !== undefined) c.notes = body.notes;
-      saveClientDb(db);
-      pushToCloudSync();
-      return { cycle: c, stats: computeClientStats(db) };
+      saveClientDb(userDb, currentUser);
+      await pushToCloudSync();
+      return { cycle: c, stats: computeClientStats(userDb) };
     }
     throw new Error('Cycle not found');
   }
 
   if (path.startsWith('/api/cycles/') && method === 'DELETE') {
+    const userDb = getClientDb(currentUser);
     const id = path.split('/')[3];
-    db.cycles = (db.cycles || []).filter(item => item.id !== id && item.startDate !== id);
-    saveClientDb(db);
+    userDb.cycles = (userDb.cycles || []).filter(item => item.id !== id && item.startDate !== id);
+    saveClientDb(userDb, currentUser);
     await pushToCloudSync();
-    return { success: true, stats: computeClientStats(db) };
+    return { success: true, stats: computeClientStats(userDb) };
   }
 
   if (path === '/api/logs' && method === 'GET') {
-    return { logs: db.logs };
+    const userDb = getClientDb(currentUser);
+    return { logs: userDb.logs || {} };
   }
 
   if (path === '/api/logs' && method === 'POST') {
+    const userDb = getClientDb(currentUser);
+    userDb.logs = userDb.logs || {};
     const date = body.date;
-    db.logs[date] = { ...body, updatedAt: new Date().toISOString() };
-    saveClientDb(db);
-    pushToCloudSync();
-    return { log: db.logs[date], stats: computeClientStats(db) };
+    userDb.logs[date] = { ...body, updatedAt: new Date().toISOString() };
+    saveClientDb(userDb, currentUser);
+    await pushToCloudSync();
+    return { log: userDb.logs[date], stats: computeClientStats(userDb) };
   }
 
   if (path === '/api/stats') {
-    return { stats: computeClientStats(db) };
+    const userDb = getClientDb(currentUser);
+    return { stats: computeClientStats(userDb) };
   }
 
   if (path === '/api/profile/pin') {
-    db.profile.quickPin = body.pin ? String(body.pin).trim() : null;
-    saveClientDb(db);
-    pushToCloudSync();
+    const userDb = getClientDb(currentUser);
+    userDb.profile = userDb.profile || {};
+    userDb.profile.quickPin = body.pin ? String(body.pin).trim() : null;
+    saveClientDb(userDb, currentUser);
+    await pushToCloudSync();
     return { success: true };
   }
 
   if (path === '/api/profile' && method === 'PUT') {
-    db.profile = { ...(db.profile || {}), ...body };
-    saveClientDb(db);
-    pushToCloudSync();
-    return { success: true, profile: db.profile };
+    const userDb = getClientDb(currentUser);
+    userDb.profile = { ...(userDb.profile || {}), ...body };
+    saveClientDb(userDb, currentUser);
+    await pushToCloudSync();
+    return { success: true, profile: userDb.profile };
   }
 
   return { success: true };
@@ -2374,12 +2494,17 @@ window.addEventListener('DOMContentLoaded', () => {
     authSubmitBtn.textContent = isRegisterMode ? 'Create Account' : 'Sign In';
     nameField.style.display = isRegisterMode ? 'flex' : 'none';
     toggleAuthLink.textContent = isRegisterMode ? 'Already have an account? Sign In' : "Don't have an account? Create Free Account";
+    const errBox = document.getElementById('auth-error-msg');
+    if (errBox) errBox.style.display = 'none';
   });
 
   // Auth Submission
   document.getElementById('auth-form').addEventListener('submit', async e => {
     e.preventDefault();
     haptic(30);
+    const errBox = document.getElementById('auth-error-msg');
+    if (errBox) errBox.style.display = 'none';
+
     const username = document.getElementById('auth-username').value;
     const password = document.getElementById('auth-password').value;
     const name = document.getElementById('auth-name').value;
@@ -2402,6 +2527,10 @@ window.addEventListener('DOMContentLoaded', () => {
       showToast(isRegisterMode ? '🌸 Welcome to LunaCare!' : '🌸 Welcome back!');
       await loadInitialData();
     } catch (err) {
+      if (errBox) {
+        errBox.textContent = '⚠️ ' + err.message;
+        errBox.style.display = 'block';
+      }
       showToast(err.message);
     }
   });

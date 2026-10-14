@@ -114,6 +114,7 @@
           <button type="submit" id="auth-submit-btn" class="btn btn-primary" style="margin-top:10px;">
             Sign In
           </button>
+          <div id="auth-error-msg" style="display:none; color:#e11d48; background:#fff1f2; border:1px solid #fecdd3; border-radius:var(--radius-md); padding:10px 12px; font-size:0.84rem; margin-top:12px; font-weight:600; line-height:1.4; text-align:center;"></div>
         </form>
 
         <div style="display:flex; justify-content:space-between; align-items:center; margin-top:16px; font-size:0.82rem;">
@@ -883,7 +884,112 @@
         return await res.json();
       },
 
-      // Store/Sync data to the cloud for this user account
+      async getRegistry() {
+        try {
+          const reg = await this.getBin(this.REGISTRY_BIN);
+          reg.accounts = reg.accounts || {};
+          reg.auth = reg.auth || {};
+          return reg;
+        } catch (e) {
+          console.warn('[Sync] Registry fetch error:', e);
+          return { accounts: {}, auth: {} };
+        }
+      },
+
+      // Check if user is registered and get credentials
+      async getAccountAuth(userEmail) {
+        if (!userEmail) return null;
+        const email = userEmail.toLowerCase().trim();
+
+        // 1. Check local cache first for fast check
+        try {
+          const localUsers = JSON.parse(localStorage.getItem('lunacare_registered_users') || '{}');
+          if (localUsers[email]) {
+            return localUsers[email];
+          }
+        } catch (e) {}
+
+        // 2. Check cloud registry
+        try {
+          const reg = await this.getRegistry();
+          if (reg.auth && reg.auth[email]) {
+            const userRec = reg.auth[email];
+            try {
+              const localUsers = JSON.parse(localStorage.getItem('lunacare_registered_users') || '{}');
+              localUsers[email] = userRec;
+              localStorage.setItem('lunacare_registered_users', JSON.stringify(localUsers));
+            } catch (e) {}
+            return userRec;
+          }
+
+          // Legacy accounts already registered in registry.accounts
+          if (reg.accounts && reg.accounts[email]) {
+            const legacyUser = {
+              username: email,
+              name: email.split('@')[0],
+              binId: reg.accounts[email],
+              isLegacy: true
+            };
+            return legacyUser;
+          }
+        } catch (err) {
+          console.warn('[Sync] getAccountAuth cloud error:', err.message);
+        }
+
+        return null;
+      },
+
+      // Register a new account in cloud registry
+      async registerAccount(userEmail, passwordHash, name) {
+        const email = userEmail.toLowerCase().trim();
+        const reg = await this.getRegistry();
+
+        if (reg.auth && reg.auth[email]) {
+          throw new Error('An account with this email/username already exists. Please Sign In.');
+        }
+
+        const initialPayload = {
+          email,
+          updatedAt: new Date().toISOString(),
+          data: {
+            cycles: [],
+            logs: {},
+            profile: {
+              name: name || email.split('@')[0],
+              quickPin: null,
+              avgCycleLength: 28,
+              avgPeriodDuration: 5
+            }
+          }
+        };
+
+        const created = await this.createBin(initialPayload);
+        const binId = created.id;
+
+        const userRec = {
+          id: 'u_' + btoa(email).replace(/[^a-zA-Z0-9]/g, ''),
+          username: email,
+          name: name || email.split('@')[0],
+          passwordHash,
+          binId,
+          createdAt: new Date().toISOString()
+        };
+
+        reg.accounts[email] = binId;
+        reg.auth[email] = userRec;
+
+        await this.putBin(this.REGISTRY_BIN, reg);
+
+        try {
+          const localUsers = JSON.parse(localStorage.getItem('lunacare_registered_users') || '{}');
+          localUsers[email] = userRec;
+          localStorage.setItem('lunacare_registered_users', JSON.stringify(localUsers));
+        } catch (e) {}
+
+        return userRec;
+      },
+
+      // Save / Sync data to the cloud for this user account
       async saveUserData(userEmail, data) {
         if (!userEmail) return false;
         const email = userEmail.toLowerCase().trim();
@@ -891,8 +997,7 @@
         if (statusEl) statusEl.innerHTML = '<span style="color:var(--primary);">⏳ Syncing to cloud...</span>';
 
         try {
-          const reg = await this.getBin(this.REGISTRY_BIN);
-          reg.accounts = reg.accounts || {};
+          const reg = await this.getRegistry();
           let binId = reg.accounts[email];
 
           const payload = {
@@ -905,7 +1010,6 @@
             try {
               await this.putBin(binId, payload);
             } catch (putErr) {
-              // If bin expired or invalid, recreate
               binId = null;
             }
           }
@@ -914,16 +1018,16 @@
             const created = await this.createBin(payload);
             binId = created.id;
             reg.accounts[email] = binId;
+            if (reg.auth && reg.auth[email]) reg.auth[email].binId = binId;
             await this.putBin(this.REGISTRY_BIN, reg);
           }
 
-          // Cache cloud mirror locally as well
-          localStorage.setItem('lunacare_cloud_mirror', JSON.stringify(payload));
-          if (statusEl) statusEl.innerHTML = '● Synced via Cloud (' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ')';
+          localStorage.setItem('lunacare_cloud_mirror_' + email, JSON.stringify(payload));
+          if (statusEl) statusEl.innerHTML = `● Connected & Synced: ${email} (${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`;
           return true;
         } catch (err) {
           console.warn('[Sync] saveUserData error:', err.message);
-          if (statusEl) statusEl.innerHTML = '● Offline / Local Mode';
+          if (statusEl) statusEl.innerHTML = '● Local Saved (Offline)';
           return false;
         }
       },
@@ -933,12 +1037,13 @@
         if (!userEmail) return null;
         const email = userEmail.toLowerCase().trim();
         try {
-          const reg = await this.getBin(this.REGISTRY_BIN);
+          const reg = await this.getRegistry();
           const binId = reg.accounts && reg.accounts[email];
           if (binId) {
             const res = await this.getBin(binId);
             if (res && res.data) {
               console.log('[Sync] Pulled cloud data for', email);
+              localStorage.setItem('lunacare_cloud_mirror_' + email, JSON.stringify(res));
               return res.data;
             }
           }
@@ -947,11 +1052,11 @@
         }
 
         // Fallback to local mirror
-        const local = localStorage.getItem('lunacare_cloud_mirror');
+        const local = localStorage.getItem('lunacare_cloud_mirror_' + email);
         if (local) {
           try {
             const parsed = JSON.parse(local);
-            if (parsed.email === email) return parsed.data;
+            if (parsed.email === email && parsed.data) return parsed.data;
           } catch (e) {}
         }
         return null;
